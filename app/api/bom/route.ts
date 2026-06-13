@@ -46,6 +46,7 @@ export async function GET(req: Request) {
             },
           },
         },
+        workOrders: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     const companyId = session.user.companyId;
     const body = await req.json();
 
-    const { productId, quantity = 1, components } = body;
+    const { productId, quantity = 1, components, reference, workOrders } = body;
 
     // Validate inputs
     if (!productId || typeof productId !== "string") {
@@ -84,6 +85,16 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(components) || components.length === 0) {
       return NextResponse.json({ success: false, message: "At least one component is required for a BoM." }, { status: 400 });
+    }
+
+    let finalReference = reference || "";
+    if (finalReference) {
+      if (finalReference.length > 9) {
+        return NextResponse.json({ success: false, message: "Reference must not exceed 9 characters." }, { status: 400 });
+      }
+    } else {
+      const count = await db.billOfMaterials.count({ where: { companyId } });
+      finalReference = `BOM-${String(count + 1).padStart(5, "0")}`;
     }
 
     // Verify parent product
@@ -129,12 +140,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // Create BoM and components inside a transaction
+    // Validate work orders if provided
+    if (workOrders && Array.isArray(workOrders)) {
+      for (const wo of workOrders) {
+        if (!wo.operation || !wo.workCenter || typeof wo.expectedDuration !== "number" || wo.expectedDuration <= 0) {
+          return NextResponse.json(
+            { success: false, message: "Each work order must have an operation, workCenter, and expectedDuration greater than 0." },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Create BoM, components, and work orders inside a transaction
     const newBoM = await db.$transaction(async (tx) => {
       const bom = await tx.billOfMaterials.create({
         data: {
           productId,
           quantity,
+          reference: finalReference,
           companyId,
           components: {
             create: components.map((comp: { productId: string; quantity: number }) => ({
@@ -142,9 +166,17 @@ export async function POST(req: Request) {
               quantity: comp.quantity,
             })),
           },
+          workOrders: {
+            create: (workOrders || []).map((wo: { operation: string; workCenter: string; expectedDuration: number }) => ({
+              operation: wo.operation,
+              workCenter: wo.workCenter,
+              expectedDuration: wo.expectedDuration,
+            })),
+          },
         },
         include: {
           components: true,
+          workOrders: true,
         },
       });
 

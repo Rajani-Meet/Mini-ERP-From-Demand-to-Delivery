@@ -43,6 +43,7 @@ export async function GET(
             },
           },
         },
+        workOrders: true,
       },
     });
 
@@ -75,7 +76,7 @@ export async function PUT(
     const companyId = session.user.companyId;
     const body = await req.json();
 
-    const { quantity = 1, components } = body;
+    const { quantity = 1, components, reference, workOrders } = body;
 
     // Validate inputs
     if (!quantity || typeof quantity !== "number" || quantity <= 0) {
@@ -86,10 +87,14 @@ export async function PUT(
       return NextResponse.json({ success: false, message: "At least one component is required." }, { status: 400 });
     }
 
+    if (reference && reference.length > 9) {
+      return NextResponse.json({ success: false, message: "Reference must not exceed 9 characters." }, { status: 400 });
+    }
+
     // Check if BoM exists
     const oldBom = await db.billOfMaterials.findFirst({
       where: { id, companyId },
-      include: { components: true },
+      include: { components: true, workOrders: true },
     });
 
     if (!oldBom) {
@@ -117,27 +122,52 @@ export async function PUT(
       }
     }
 
+    // Validate work orders if provided
+    if (workOrders && Array.isArray(workOrders)) {
+      for (const wo of workOrders) {
+        if (!wo.operation || !wo.workCenter || typeof wo.expectedDuration !== "number" || wo.expectedDuration <= 0) {
+          return NextResponse.json(
+            { success: false, message: "Each work order must have an operation, workCenter, and expectedDuration greater than 0." },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // Perform updates inside a transaction
     const updatedBom = await db.$transaction(async (tx) => {
-      // 1. Delete all old components
+      // 1. Delete all old components and work orders
       await tx.boMComponent.deleteMany({
         where: { bomId: id },
       });
 
-      // 2. Update BoM quantity and recreate components
+      await tx.boMWorkOrder.deleteMany({
+        where: { bomId: id },
+      });
+
+      // 2. Update BoM quantity and recreate components/work orders
       const bom = await tx.billOfMaterials.update({
         where: { id },
         data: {
           quantity,
+          reference: reference || null,
           components: {
             create: components.map((comp: { productId: string; quantity: number }) => ({
               productId: comp.productId,
               quantity: comp.quantity,
             })),
           },
+          workOrders: {
+            create: (workOrders || []).map((wo: { operation: string; workCenter: string; expectedDuration: number }) => ({
+              operation: wo.operation,
+              workCenter: wo.workCenter,
+              expectedDuration: wo.expectedDuration,
+            })),
+          },
         },
         include: {
           components: true,
+          workOrders: true,
         },
       });
 
@@ -183,7 +213,7 @@ export async function DELETE(
 
     const bom = await db.billOfMaterials.findFirst({
       where: { id, companyId },
-      include: { components: true },
+      include: { components: true, workOrders: true },
     });
 
     if (!bom) {

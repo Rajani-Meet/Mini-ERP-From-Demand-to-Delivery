@@ -57,9 +57,15 @@ export async function recordStockMovement(
         throw new Error(`Unknown movement type: ${movementType}`);
     }
 
-    // Validation: Stock cannot go below zero
+    // Validation: Stock cannot go below zero unless allowed by settings
     if (newStockQty < 0) {
-      throw new Error(`Insufficient stock for product "${product.name}" (${product.sku}). Current stock: ${product.stockQty}, required deduction: ${quantity}.`);
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { allowNegativeStock: true },
+      });
+      if (!company?.allowNegativeStock) {
+        throw new Error(`Insufficient stock for product "${product.name}" (${product.sku}). Current stock: ${product.stockQty}, required deduction: ${quantity}.`);
+      }
     }
 
     if (newReservedQty < 0) {
