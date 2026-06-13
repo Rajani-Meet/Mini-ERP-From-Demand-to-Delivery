@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -17,9 +17,15 @@ export async function GET() {
     }
 
     const companyId = session.user.companyId;
+    const { searchParams } = new URL(req.url);
+    const productId = searchParams.get("productId");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = { companyId };
+    if (productId) where.productId = productId;
 
     const boms = await db.billOfMaterials.findMany({
-      where: { companyId },
+      where,
       include: {
         product: {
           select: {
