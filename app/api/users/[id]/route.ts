@@ -14,8 +14,8 @@ export async function PATCH(
       return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
     }
 
-    // Role check: Admin only
-    if (session.user.role !== Role.ADMIN) {
+    // Role check: Admin or Super Admin only
+    if (session.user.role !== Role.ADMIN && session.user.role !== "SUPER_ADMIN" as Role) {
       return NextResponse.json({ success: false, message: "Forbidden: Admin access only." }, { status: 403 });
     }
 
@@ -23,7 +23,17 @@ export async function PATCH(
     const companyId = session.user.companyId;
     const body = await req.json();
 
-    const { role, status } = body;
+    const {
+      role,
+      status,
+      canAccessProducts,
+      canAccessSales,
+      canAccessPurchases,
+      canAccessManufacturing,
+      canAccessBoM,
+      canAccessStockLedger,
+      canAccessAuditLogs,
+    } = body;
 
     // Fetch user to edit
     const targetUser = await db.user.findFirst({
@@ -58,6 +68,13 @@ export async function PATCH(
       }
       updateData.status = status;
     }
+    if (canAccessProducts !== undefined) updateData.canAccessProducts = canAccessProducts;
+    if (canAccessSales !== undefined) updateData.canAccessSales = canAccessSales;
+    if (canAccessPurchases !== undefined) updateData.canAccessPurchases = canAccessPurchases;
+    if (canAccessManufacturing !== undefined) updateData.canAccessManufacturing = canAccessManufacturing;
+    if (canAccessBoM !== undefined) updateData.canAccessBoM = canAccessBoM;
+    if (canAccessStockLedger !== undefined) updateData.canAccessStockLedger = canAccessStockLedger;
+    if (canAccessAuditLogs !== undefined) updateData.canAccessAuditLogs = canAccessAuditLogs;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: false, message: "No fields provided to update." }, { status: 400 });
@@ -73,6 +90,13 @@ export async function PATCH(
         email: true,
         role: true,
         status: true,
+        canAccessProducts: true,
+        canAccessSales: true,
+        canAccessPurchases: true,
+        canAccessManufacturing: true,
+        canAccessBoM: true,
+        canAccessStockLedger: true,
+        canAccessAuditLogs: true,
       },
     });
 
@@ -84,8 +108,28 @@ export async function PATCH(
         action: "UPDATE",
         userId: session.user.id,
         companyId,
-        oldValue: JSON.stringify({ role: targetUser.role, status: targetUser.status }),
-        newValue: JSON.stringify({ role: updatedUser.role, status: updatedUser.status }),
+        oldValue: JSON.stringify({
+          role: targetUser.role,
+          status: targetUser.status,
+          canAccessProducts: targetUser.canAccessProducts,
+          canAccessSales: targetUser.canAccessSales,
+          canAccessPurchases: targetUser.canAccessPurchases,
+          canAccessManufacturing: targetUser.canAccessManufacturing,
+          canAccessBoM: targetUser.canAccessBoM,
+          canAccessStockLedger: targetUser.canAccessStockLedger,
+          canAccessAuditLogs: targetUser.canAccessAuditLogs,
+        }),
+        newValue: JSON.stringify({
+          role: updatedUser.role,
+          status: updatedUser.status,
+          canAccessProducts: updatedUser.canAccessProducts,
+          canAccessSales: updatedUser.canAccessSales,
+          canAccessPurchases: updatedUser.canAccessPurchases,
+          canAccessManufacturing: updatedUser.canAccessManufacturing,
+          canAccessBoM: updatedUser.canAccessBoM,
+          canAccessStockLedger: updatedUser.canAccessStockLedger,
+          canAccessAuditLogs: updatedUser.canAccessAuditLogs,
+        }),
       },
     });
 

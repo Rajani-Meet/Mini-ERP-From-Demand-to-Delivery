@@ -51,6 +51,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // Setup Wizard logic: If a SUPER_ADMIN already exists in the database, block public signup.
+    const superAdminExists = await db.user.findFirst({
+      where: { role: "SUPER_ADMIN" },
+    });
+
+    if (superAdminExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Public signup is disabled. Please contact the system administrator to provision a company profile.",
+          code: "SIGNUP_DISABLED",
+        },
+        { status: 403 }
+      );
+    }
+
     // Hash the password securely
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
@@ -68,7 +84,7 @@ export async function POST(req: Request) {
           name,
           email,
           passwordHash,
-          role: "ADMIN", // First user is the Admin
+          role: "SUPER_ADMIN", // First user is the System/Super Admin
           status: "ACTIVE",
           companyId: company.id,
         },

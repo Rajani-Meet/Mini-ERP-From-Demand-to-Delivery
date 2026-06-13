@@ -33,6 +33,13 @@ export default async function DashboardLayout({
     name: session.user.name ?? "Operator",
     email: session.user.email ?? "",
     role: session.user.role,
+    canAccessProducts: session.user.canAccessProducts,
+    canAccessSales: session.user.canAccessSales,
+    canAccessPurchases: session.user.canAccessPurchases,
+    canAccessManufacturing: session.user.canAccessManufacturing,
+    canAccessBoM: session.user.canAccessBoM,
+    canAccessStockLedger: session.user.canAccessStockLedger,
+    canAccessAuditLogs: session.user.canAccessAuditLogs,
   };
 
   return (

@@ -8,6 +8,13 @@ declare module "next-auth" {
       companyId: string;
       role: Role;
       status: UserStatus;
+      canAccessProducts: boolean;
+      canAccessSales: boolean;
+      canAccessPurchases: boolean;
+      canAccessManufacturing: boolean;
+      canAccessBoM: boolean;
+      canAccessStockLedger: boolean;
+      canAccessAuditLogs: boolean;
     } & DefaultSession["user"];
   }
 
@@ -16,6 +23,13 @@ declare module "next-auth" {
     companyId: string;
     role: Role;
     status: UserStatus;
+    canAccessProducts: boolean;
+    canAccessSales: boolean;
+    canAccessPurchases: boolean;
+    canAccessManufacturing: boolean;
+    canAccessBoM: boolean;
+    canAccessStockLedger: boolean;
+    canAccessAuditLogs: boolean;
   }
 }
 
@@ -25,5 +39,12 @@ declare module "next-auth/jwt" {
     companyId: string;
     role: Role;
     status: UserStatus;
+    canAccessProducts: boolean;
+    canAccessSales: boolean;
+    canAccessPurchases: boolean;
+    canAccessManufacturing: boolean;
+    canAccessBoM: boolean;
+    canAccessStockLedger: boolean;
+    canAccessAuditLogs: boolean;
   }
 }

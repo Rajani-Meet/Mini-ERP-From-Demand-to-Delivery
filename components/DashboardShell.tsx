@@ -14,6 +14,10 @@ import {
   Shield,
   LogOut,
   Settings,
+  Building2,
+  Globe,
+  Users,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 
@@ -29,6 +33,13 @@ interface DashboardShellProps {
     name: string;
     email: string;
     role: string;
+    canAccessProducts?: boolean;
+    canAccessSales?: boolean;
+    canAccessPurchases?: boolean;
+    canAccessManufacturing?: boolean;
+    canAccessBoM?: boolean;
+    canAccessStockLedger?: boolean;
+    canAccessAuditLogs?: boolean;
   };
 }
 
@@ -57,13 +68,39 @@ export default function DashboardShell({
   const navItems = [
     { name: "Console", href: "/", icon: LayoutDashboard },
     { name: "Products", href: "/products", icon: Package },
+    { name: "BoM", href: "/bill-of-materials", icon: FileSpreadsheet },
     { name: "Stock Ledger", href: "/stock-ledger", icon: Database },
     { name: "Sales", href: "/sales-orders", icon: ShoppingCart },
     { name: "Purchases", href: "/purchase-orders", icon: TrendingDown },
     { name: "Manufacturing", href: "/manufacturing-orders", icon: Factory },
+    { name: "Users", href: "/users", icon: Users },
     { name: "Audit Logs", href: "/audit-logs", icon: Shield },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
+
+  // For Super Admins, show dedicated super-admin pages only
+  let filteredNavItems = navItems;
+  if (user.role === "SUPER_ADMIN") {
+    filteredNavItems = [
+      { name: "Dashboard", href: "/super-admin", icon: Globe },
+      { name: "Companies", href: "/super-admin/companies", icon: Building2 },
+      { name: "Users", href: "/super-admin/users", icon: Users },
+      { name: "Settings", href: "/settings", icon: Settings },
+    ];
+  } else {
+    // Check user's granular module permission flags
+    filteredNavItems = navItems.filter((item) => {
+      if (item.name === "Products" && user.canAccessProducts === false) return false;
+      if (item.name === "BoM" && user.canAccessBoM === false) return false;
+      if (item.name === "Stock Ledger" && user.canAccessStockLedger === false) return false;
+      if (item.name === "Sales" && user.canAccessSales === false) return false;
+      if (item.name === "Purchases" && user.canAccessPurchases === false) return false;
+      if (item.name === "Manufacturing" && user.canAccessManufacturing === false) return false;
+      if (item.name === "Users" && user.role !== "ADMIN") return false;
+      if (item.name === "Audit Logs" && user.canAccessAuditLogs === false) return false;
+      return true;
+    });
+  }
 
   // Fallback avatar letter
   const avatarLetter = branding.companyName.charAt(0).toUpperCase();
@@ -135,7 +172,7 @@ export default function DashboardShell({
       {/* Floating Bottom Dock Navigation */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
         <nav className="flex items-center gap-1 bg-[#0E111A]/90 border border-[#1E293B]/80 px-4 py-2.5 rounded-2xl shadow-2xl shadow-black/80 backdrop-blur-lg">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||

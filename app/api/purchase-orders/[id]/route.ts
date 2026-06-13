@@ -83,6 +83,29 @@ export async function PUT(
 
     let totalAmount = existing.totalAmount;
     if (lines && Array.isArray(lines)) {
+      if (lines.length === 0) {
+        return NextResponse.json({ success: false, message: "At least one order line is required." }, { status: 400 });
+      }
+
+      // Validate and verify line items
+      for (const line of lines) {
+        if (!line.productId || typeof line.productId !== "string") {
+          return NextResponse.json({ success: false, message: "Product ID is required for all lines." }, { status: 400 });
+        }
+        if (typeof line.orderedQty !== "number" || line.orderedQty <= 0) {
+          return NextResponse.json({ success: false, message: "Quantity must be a positive number." }, { status: 400 });
+        }
+        if (typeof line.unitCost !== "number" || line.unitCost < 0) {
+          return NextResponse.json({ success: false, message: "Unit cost must be a non-negative number." }, { status: 400 });
+        }
+
+        // Verify product exists and belongs to company
+        const product = await db.product.findFirst({ where: { id: line.productId, companyId } });
+        if (!product) {
+          return NextResponse.json({ success: false, message: `Product with ID ${line.productId} not found.` }, { status: 404 });
+        }
+      }
+
       totalAmount = lines.reduce(
         (sum: number, l: { orderedQty: number; unitCost: number }) => sum + l.orderedQty * l.unitCost,
         0

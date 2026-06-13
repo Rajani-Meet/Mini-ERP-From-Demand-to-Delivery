@@ -52,6 +52,13 @@ export const authOptions: AuthOptions = {
           companyId: user.companyId,
           role: user.role,
           status: user.status,
+          canAccessProducts: user.canAccessProducts,
+          canAccessSales: user.canAccessSales,
+          canAccessPurchases: user.canAccessPurchases,
+          canAccessManufacturing: user.canAccessManufacturing,
+          canAccessBoM: user.canAccessBoM,
+          canAccessStockLedger: user.canAccessStockLedger,
+          canAccessAuditLogs: user.canAccessAuditLogs,
         };
       },
     }),
@@ -63,6 +70,13 @@ export const authOptions: AuthOptions = {
         token.companyId = user.companyId;
         token.role = user.role;
         token.status = user.status;
+        token.canAccessProducts = user.canAccessProducts;
+        token.canAccessSales = user.canAccessSales;
+        token.canAccessPurchases = user.canAccessPurchases;
+        token.canAccessManufacturing = user.canAccessManufacturing;
+        token.canAccessBoM = user.canAccessBoM;
+        token.canAccessStockLedger = user.canAccessStockLedger;
+        token.canAccessAuditLogs = user.canAccessAuditLogs;
       }
       return token;
     },
@@ -72,6 +86,13 @@ export const authOptions: AuthOptions = {
         session.user.companyId = token.companyId;
         session.user.role = token.role;
         session.user.status = token.status;
+        session.user.canAccessProducts = token.canAccessProducts;
+        session.user.canAccessSales = token.canAccessSales;
+        session.user.canAccessPurchases = token.canAccessPurchases;
+        session.user.canAccessManufacturing = token.canAccessManufacturing;
+        session.user.canAccessBoM = token.canAccessBoM;
+        session.user.canAccessStockLedger = token.canAccessStockLedger;
+        session.user.canAccessAuditLogs = token.canAccessAuditLogs;
       }
       return session;
     },

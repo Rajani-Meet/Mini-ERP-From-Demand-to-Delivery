@@ -8,6 +8,7 @@ generator client {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   MANAGER
   OPERATOR
@@ -83,6 +84,15 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
+
+  // Granular Access Flags (Allotted access to functionalities)
+  canAccessProducts      Boolean    @default(true)
+  canAccessSales         Boolean    @default(true)
+  canAccessPurchases     Boolean    @default(true)
+  canAccessManufacturing Boolean    @default(true)
+  canAccessBoM           Boolean    @default(true)
+  canAccessStockLedger   Boolean    @default(true)
+  canAccessAuditLogs     Boolean    @default(true)
 }
 
 model Product {

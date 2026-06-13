@@ -24,6 +24,13 @@ interface UserItem {
   role: Role;
   status: UserStatus;
   createdAt: string;
+  canAccessProducts?: boolean;
+  canAccessSales?: boolean;
+  canAccessPurchases?: boolean;
+  canAccessManufacturing?: boolean;
+  canAccessBoM?: boolean;
+  canAccessStockLedger?: boolean;
+  canAccessAuditLogs?: boolean;
 }
 
 export default function UserManagementPage() {
@@ -51,6 +58,13 @@ export default function UserManagementPage() {
   const [role, setRole] = useState<Role>(Role.VIEWER);
   const [status, setStatus] = useState<UserStatus>(UserStatus.ACTIVE);
   const [password, setPassword] = useState("");
+  const [canAccessProducts, setCanAccessProducts] = useState(true);
+  const [canAccessSales, setCanAccessSales] = useState(true);
+  const [canAccessPurchases, setCanAccessPurchases] = useState(true);
+  const [canAccessManufacturing, setCanAccessManufacturing] = useState(true);
+  const [canAccessBoM, setCanAccessBoM] = useState(true);
+  const [canAccessStockLedger, setCanAccessStockLedger] = useState(true);
+  const [canAccessAuditLogs, setCanAccessAuditLogs] = useState(true);
 
   // Fetch users
   const fetchUsers = async () => {
@@ -100,6 +114,13 @@ export default function UserManagementPage() {
     setRole(Role.VIEWER);
     setStatus(UserStatus.ACTIVE);
     setPassword("");
+    setCanAccessProducts(true);
+    setCanAccessSales(true);
+    setCanAccessPurchases(true);
+    setCanAccessManufacturing(true);
+    setCanAccessBoM(true);
+    setCanAccessStockLedger(true);
+    setCanAccessAuditLogs(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsDrawerOpen(true);
@@ -112,6 +133,13 @@ export default function UserManagementPage() {
     setRole(user.role);
     setStatus(user.status);
     setPassword(""); // Leave blank when editing
+    setCanAccessProducts(user.canAccessProducts ?? true);
+    setCanAccessSales(user.canAccessSales ?? true);
+    setCanAccessPurchases(user.canAccessPurchases ?? true);
+    setCanAccessManufacturing(user.canAccessManufacturing ?? true);
+    setCanAccessBoM(user.canAccessBoM ?? true);
+    setCanAccessStockLedger(user.canAccessStockLedger ?? true);
+    setCanAccessAuditLogs(user.canAccessAuditLogs ?? true);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsDrawerOpen(true);
@@ -175,8 +203,30 @@ export default function UserManagementPage() {
       const method = editingUser ? "PATCH" : "POST";
 
       const payload = editingUser
-        ? { role, status }
-        : { name, email, role, password };
+        ? {
+            role,
+            status,
+            canAccessProducts,
+            canAccessSales,
+            canAccessPurchases,
+            canAccessManufacturing,
+            canAccessBoM,
+            canAccessStockLedger,
+            canAccessAuditLogs,
+          }
+        : {
+            name,
+            email,
+            role,
+            password,
+            canAccessProducts,
+            canAccessSales,
+            canAccessPurchases,
+            canAccessManufacturing,
+            canAccessBoM,
+            canAccessStockLedger,
+            canAccessAuditLogs,
+          };
 
       const response = await fetch(url, {
         method,
@@ -545,6 +595,80 @@ export default function UserManagementPage() {
                   <option value={UserStatus.ACTIVE}>Active</option>
                   <option value={UserStatus.INACTIVE}>Inactive (Deactivated)</option>
                 </select>
+              </div>
+            )}
+
+            {/* Feature Access Controls */}
+            {role !== Role.ADMIN && role !== "SUPER_ADMIN" as Role && (
+              <div className="space-y-3 pt-3 border-t border-[#1E293B]/50">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+                  Allot Access to Functionality
+                </h4>
+                <div className="grid grid-cols-1 gap-2.5 bg-[#07080C] p-4 rounded-xl border border-[#1E293B]">
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessProducts}
+                      onChange={(e) => setCanAccessProducts(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Products & Inventory Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessSales}
+                      onChange={(e) => setCanAccessSales(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Sales Orders Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessPurchases}
+                      onChange={(e) => setCanAccessPurchases(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Purchase Orders Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessManufacturing}
+                      onChange={(e) => setCanAccessManufacturing(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Manufacturing Orders Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessBoM}
+                      onChange={(e) => setCanAccessBoM(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Bill of Materials Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessStockLedger}
+                      onChange={(e) => setCanAccessStockLedger(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Stock Ledger Access</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer hover:text-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canAccessAuditLogs}
+                      onChange={(e) => setCanAccessAuditLogs(e.target.checked)}
+                      className="w-4 h-4 bg-slate-900 border-slate-700 text-amber-500 rounded focus:ring-0 cursor-pointer"
+                    />
+                    <span>Audit Logs Access</span>
+                  </label>
+                </div>
               </div>
             )}
           </form>

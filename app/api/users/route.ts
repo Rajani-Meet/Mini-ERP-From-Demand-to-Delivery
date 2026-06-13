@@ -18,6 +18,13 @@ const inviteSchema = z.object({
     .refine((val) => /[a-z]/.test(val), "Password must contain at least one lowercase letter")
     .refine((val) => /[0-9]/.test(val), "Password must contain at least one number")
     .refine((val) => /[^a-zA-Z0-9]/.test(val), "Password must contain at least one special character"),
+  canAccessProducts: z.boolean().default(true),
+  canAccessSales: z.boolean().default(true),
+  canAccessPurchases: z.boolean().default(true),
+  canAccessManufacturing: z.boolean().default(true),
+  canAccessBoM: z.boolean().default(true),
+  canAccessStockLedger: z.boolean().default(true),
+  canAccessAuditLogs: z.boolean().default(true),
 });
 
 export async function GET() {
@@ -27,8 +34,8 @@ export async function GET() {
       return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
     }
 
-    // List page is Admin-only
-    if (session.user.role !== Role.ADMIN) {
+    // List page is Admin or Super Admin-only
+    if (session.user.role !== Role.ADMIN && session.user.role !== "SUPER_ADMIN" as Role) {
       return NextResponse.json({ success: false, message: "Forbidden: Admin access only." }, { status: 403 });
     }
 
@@ -43,6 +50,13 @@ export async function GET() {
         role: true,
         status: true,
         createdAt: true,
+        canAccessProducts: true,
+        canAccessSales: true,
+        canAccessPurchases: true,
+        canAccessManufacturing: true,
+        canAccessBoM: true,
+        canAccessStockLedger: true,
+        canAccessAuditLogs: true,
       },
       orderBy: { createdAt: "asc" },
     });
@@ -61,8 +75,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
     }
 
-    // Inviting users is Admin-only
-    if (session.user.role !== Role.ADMIN) {
+    // Inviting users is Admin or Super Admin-only
+    if (session.user.role !== Role.ADMIN && session.user.role !== "SUPER_ADMIN" as Role) {
       return NextResponse.json({ success: false, message: "Forbidden: Admin access only." }, { status: 403 });
     }
 
@@ -77,7 +91,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, role, password } = parsed.data;
+    const {
+      name,
+      email,
+      role,
+      password,
+      canAccessProducts,
+      canAccessSales,
+      canAccessPurchases,
+      canAccessManufacturing,
+      canAccessBoM,
+      canAccessStockLedger,
+      canAccessAuditLogs,
+    } = parsed.data;
 
     // Check if user already exists
     const existingUser = await db.user.findUnique({
@@ -104,6 +130,13 @@ export async function POST(req: Request) {
         role,
         status: "ACTIVE",
         companyId,
+        canAccessProducts,
+        canAccessSales,
+        canAccessPurchases,
+        canAccessManufacturing,
+        canAccessBoM,
+        canAccessStockLedger,
+        canAccessAuditLogs,
       },
       select: {
         id: true,
@@ -111,6 +144,13 @@ export async function POST(req: Request) {
         email: true,
         role: true,
         status: true,
+        canAccessProducts: true,
+        canAccessSales: true,
+        canAccessPurchases: true,
+        canAccessManufacturing: true,
+        canAccessBoM: true,
+        canAccessStockLedger: true,
+        canAccessAuditLogs: true,
       },
     });
 

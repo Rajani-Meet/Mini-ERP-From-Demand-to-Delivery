@@ -433,7 +433,10 @@ export default function ProductDrawer({
                 </a>
               ) : (
                 <span className="text-slate-500 text-sm italic">
-                  No BoM yet — create one in Bill of Materials
+                  No BoM yet — create one in{" "}
+                  <a href="/bill-of-materials" className="text-amber-500 hover:underline">
+                    Bill of Materials
+                  </a>
                 </span>
               )}
             </div>
