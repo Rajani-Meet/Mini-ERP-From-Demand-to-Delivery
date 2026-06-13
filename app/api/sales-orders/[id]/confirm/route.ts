@@ -153,11 +153,6 @@ export async function POST(
         // MAKE product -> trigger MO
         const moId = await createManufacturingOrderFromSO(line.id);
         linkedMoIds.push(moId);
-        // MAKE product OR BUY with insufficient stock → trigger MO if enabled
-        if (autoCreateMO) {
-          const moId = await createManufacturingOrderFromSO(line.id);
-          linkedMoIds.push(moId);
-        }
       }
     }
 

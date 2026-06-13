@@ -127,6 +127,14 @@ function LoginFields() {
           {errors.password && (
             <p className="text-xs text-red-400 mt-1">{errors.password.message}</p>
           )}
+          <div className="flex justify-end mt-1.5">
+            <Link
+              href="/forgot-password"
+              className="text-xs text-amber-500 hover:text-amber-400 hover:underline transition-colors font-medium"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </div>
 
         <button
