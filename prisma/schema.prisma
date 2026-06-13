@@ -167,9 +167,12 @@ model PurchaseOrderItem {
   updatedAt       DateTime      @updatedAt
 }
 
+// NOTE: ManufacturingOrder lacks explicit bomId and salesOrderItemId columns.
+// - bomId is resolved implicitly via the Product's BoM association.
+// - salesOrderItemId (for MTO) is encoded into the moNumber field as `MTO-${salesOrderItemId}`.
 model ManufacturingOrder {
   id        String   @id @default(uuid())
-  moNumber  String   @unique
+  moNumber  String   @unique // Encodes salesOrderItemId for MTO orders (e.g. MTO-{uuid})
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity  Int
