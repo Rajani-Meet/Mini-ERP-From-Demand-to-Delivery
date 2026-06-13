@@ -150,26 +150,9 @@ export async function POST(
           }
         }
       } else {
-<<<<<<< HEAD
-<<<<<<< HEAD
         // MAKE product -> trigger MO
         const moId = await createManufacturingOrderFromSO(line.id);
         linkedMoIds.push(moId);
-=======
-=======
-        // MAKE product -> trigger MO
-        const moId = await createManufacturingOrderFromSO(line.id);
-        linkedMoIds.push(moId);
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
-        // MAKE product OR BUY with insufficient stock → trigger MO if enabled
-        if (autoCreateMO) {
-          const moId = await createManufacturingOrderFromSO(line.id);
-          linkedMoIds.push(moId);
-        }
-<<<<<<< HEAD
->>>>>>> 3800079912457f2df37a72396f61cb4c6bbb6d80
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
       }
     }
 

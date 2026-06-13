@@ -16,6 +16,8 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Download,
+  FileText,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -42,7 +44,7 @@ interface AuditLogItem {
   createdAt: string;
 }
 
-export function AuditLogsContent() {
+function AuditLogsContent() {
   const { data: session } = useSession();
   const userRole = (session?.user?.role as Role) || "VIEWER";
 
@@ -132,6 +134,56 @@ export function AuditLogsContent() {
     }
   }, [currentPage, entityFilter, userFilter, startDate, endDate, canRead]);
 
+  const handleExportCSV = async () => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (entityFilter !== "ALL") queryParams.append("entity", entityFilter);
+      if (userFilter !== "ALL") queryParams.append("userId", userFilter);
+      if (startDate) queryParams.append("startDate", startDate);
+      if (endDate) queryParams.append("endDate", endDate);
+      queryParams.append("limit", "1000"); // fetch up to 1000 matching logs for report
+
+      const response = await fetch(`/api/audit-logs?${queryParams.toString()}`);
+      const resData = await response.json();
+
+      if (resData.success && resData.data.logs) {
+        const logsToExport = resData.data.logs;
+        const headers = ["Timestamp", "Action", "Entity", "Entity Reference ID", "Operator Name", "Operator Email", "State Before", "State After"];
+        const rows = logsToExport.map((log: any) => [
+          new Date(log.createdAt).toISOString(),
+          log.action,
+          log.entity,
+          log.entityId,
+          log.user ? log.user.name : "System API",
+          log.user ? log.user.email : "",
+          log.oldValue || "",
+          log.newValue || ""
+        ]);
+
+        const csvContent = [
+          headers.join(","),
+          ...rows.map((r: any) => r.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `audit_logs_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error("Failed to export audit logs:", error);
+    }
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
   // Guard: Unauthorized role access
   if (!canRead) {
     return (
@@ -178,14 +230,34 @@ export function AuditLogsContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-[#1E293B] pb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
-          <History className="w-8 h-8 text-amber-500" />
-          Audit Logs
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Read-only system trail ledger of user and background data modifications.
-        </p>
+      <div className="flex items-center justify-between border-b border-[#1E293B] pb-6">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
+            <History className="w-8 h-8 text-amber-500" />
+            Audit Logs
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Read-only system trail ledger of user and background data modifications.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 no-print">
+          <button
+            onClick={handleExportCSV}
+            disabled={logs.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0E111A] hover:bg-slate-900 border border-[#1E293B] hover:border-[#1E293B]/80 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono font-bold transition-all"
+          >
+            <Download className="w-4 h-4 text-amber-500" />
+            Export CSV
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={logs.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0E111A] hover:bg-slate-900 border border-[#1E293B] hover:border-[#1E293B]/80 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono font-bold transition-all"
+          >
+            <FileText className="w-4 h-4 text-amber-500" />
+            Export PDF
+          </button>
+        </div>
       </div>
 
       {/* Error Alert */}
@@ -197,7 +269,7 @@ export function AuditLogsContent() {
       )}
 
       {/* Filter panel */}
-      <div className="bg-[#0E111A] border border-[#1E293B]/60 p-5 rounded-xl space-y-4 shadow-xl">
+      <div className="bg-[#0E111A] border border-[#1E293B]/60 p-5 rounded-xl space-y-4 shadow-xl no-print">
         <div className="flex items-center gap-2 text-slate-200 font-mono text-[11px] uppercase tracking-wider font-bold">
           <Filter className="w-4 h-4 text-amber-500" /> Filter Selection
         </div>
@@ -360,26 +432,24 @@ export function AuditLogsContent() {
                       </tr>
 
                       {/* Expandable JSON details pane */}
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={6} className="p-4 bg-[#07080C]/40 border-t border-b border-[#1E293B]/40">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1.5">
-                                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-                                  State Before Mutation
-                                </span>
-                                {renderJSON(log.oldValue)}
-                              </div>
-                              <div className="space-y-1.5">
-                                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-                                  State After Mutation
-                                </span>
-                                {renderJSON(log.newValue)}
-                              </div>
+                      <tr className={`${isExpanded ? "table-row" : "hidden print:table-row"}`}>
+                        <td colSpan={6} className="p-4 bg-[#07080C]/40 border-t border-b border-[#1E293B]/40">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                                State Before Mutation
+                              </span>
+                              {renderJSON(log.oldValue)}
                             </div>
-                          </td>
-                        </tr>
-                      )}
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                                State After Mutation
+                              </span>
+                              {renderJSON(log.newValue)}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     </React.Fragment>
                   );
                 })}
@@ -391,7 +461,7 @@ export function AuditLogsContent() {
 
       {/* Pagination controls */}
       {totalPages > 1 && (
-        <div className="flex justify-between items-center bg-[#0E111A] border border-[#1E293B]/60 p-4 rounded-xl text-xs text-slate-400 font-mono shadow-md">
+        <div className="flex justify-between items-center bg-[#0E111A] border border-[#1E293B]/60 p-4 rounded-xl text-xs text-slate-400 font-mono shadow-md no-print">
           <span>
             Page {currentPage} of {totalPages}
           </span>

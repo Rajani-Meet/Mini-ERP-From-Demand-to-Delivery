@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Database, TrendingUp, TrendingDown, BarChart3, AlertCircle } from "lucide-react";
+import { Database, TrendingUp, TrendingDown, BarChart3, AlertCircle, Download, FileText } from "lucide-react";
 
 type MovementType = "IN" | "OUT" | "RESERVE" | "RELEASE";
 
@@ -113,6 +113,41 @@ export default function StockLedgerPage() {
     fetchMovements();
   }, [fetchMovements]);
 
+  const handleExportCSV = () => {
+    if (movements.length === 0) return;
+
+    const headers = ["Timestamp", "Product Name", "SKU", "Movement Type", "Quantity", "Reference Type", "Reference ID", "Balance After"];
+    const rows = movements.map((m) => [
+      new Date(m.createdAt).toISOString(),
+      m.product.name,
+      m.product.sku,
+      m.movementType,
+      m.quantity,
+      m.referenceType,
+      m.referenceId,
+      m.balanceAfter
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `stock_ledger_report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
   const typeFilters: { label: string; value: MovementType | "" }[] = [
     { label: "All Types", value: "" },
     { label: "IN", value: "IN" },
@@ -165,10 +200,28 @@ export default function StockLedgerPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-1">Complete inventory movement history</p>
         </div>
+        <div className="flex items-center gap-2 no-print">
+          <button
+            onClick={handleExportCSV}
+            disabled={movements.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0E111A] hover:bg-slate-900 border border-[#1E293B] hover:border-[#1E293B]/80 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono font-bold transition-all"
+          >
+            <Download className="w-4 h-4 text-amber-500" />
+            Export CSV
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={movements.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0E111A] hover:bg-slate-900 border border-[#1E293B] hover:border-[#1E293B]/80 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono font-bold transition-all"
+          >
+            <FileText className="w-4 h-4 text-amber-500" />
+            Export PDF
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 no-print">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -198,7 +251,7 @@ export default function StockLedgerPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-start sm:items-center">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-start sm:items-center no-print">
         {/* Product selector */}
         <select
           value={productId}

@@ -195,28 +195,8 @@ export async function PATCH(
           );
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
         // C. Record stock movements atomically in a transaction
         const updatedMO = await db.$transaction(async (tx) => {
-          // 1. Consume components (OUT)
-          for (const comp of bom.components) {
-            await recordStockMovement(
-              comp.productId,
-              comp.quantity * mo.quantity,
-              MovementType.OUT,
-              "MANUFACTURING_ORDER",
-              mo.id,
-              companyId,
-              tx
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
-        // C. Record stock movements
-        await db.$transaction(async (tx) => {
           // 1. Consume components (OUT)
           for (const comp of moComponents) {
             await recordStockMovement(
@@ -225,11 +205,8 @@ export async function PATCH(
               MovementType.OUT,
               "MANUFACTURING_ORDER",
               mo.id,
-              companyId
-<<<<<<< HEAD
->>>>>>> 3800079912457f2df37a72396f61cb4c6bbb6d80
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
+              companyId,
+              tx
             );
           }
 
@@ -245,24 +222,11 @@ export async function PATCH(
           );
 
           // 3. Update MO status
-<<<<<<< HEAD
-<<<<<<< HEAD
           return await tx.manufacturingOrder.update({
-=======
-          await tx.manufacturingOrder.update({
->>>>>>> 3800079912457f2df37a72396f61cb4c6bbb6d80
-=======
-          return await tx.manufacturingOrder.update({
-          await tx.manufacturingOrder.update({
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
             where: { id },
             data: { status: targetStatus },
           });
         });
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
 
         // E. Write status change audit log
         await logAudit(
@@ -287,23 +251,6 @@ export async function PATCH(
       });
 
       // Write status change audit log
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
-      } else {
-        // Simple status update
-        await db.manufacturingOrder.update({
-          where: { id },
-          data: { status: targetStatus },
-        });
-      }
-
-      // E. Write status change audit log
-<<<<<<< HEAD
->>>>>>> 3800079912457f2df37a72396f61cb4c6bbb6d80
-=======
->>>>>>> 1f42c6728a5553ed5db2f09d36a702b394b03a87
       await logAudit(
         companyId,
         session.user.id,
@@ -316,7 +263,7 @@ export async function PATCH(
         }
       );
 
-      return NextResponse.json({ success: true, data: { ...mo, status: targetStatus } });
+      return NextResponse.json({ success: true, data: updatedMO });
     }
 
     return NextResponse.json({ success: false, message: "No actions specified." }, { status: 400 });
