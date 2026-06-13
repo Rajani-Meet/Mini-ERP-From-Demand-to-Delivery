@@ -63,39 +63,63 @@ export async function POST(
 
     // If CONFIRMED — release reserved stock and cancel linked MOs
     if (so.status === "CONFIRMED") {
-      for (const line of so.items) {
-        const product = line.product;
+      await db.$transaction(async (tx) => {
+        for (const line of so.items) {
+          // Find how much was actually reserved for this sales order line
+          const reserveMovements = await tx.inventoryMovement.findMany({
+            where: {
+              productId: line.productId,
+              referenceType: "SALES_ORDER",
+              referenceId: so.id,
+              movementType: MovementType.RESERVE,
+              companyId,
+            },
+          });
+          const totalReserved = reserveMovements.reduce((sum: number, m: { quantity: number }) => sum + m.quantity, 0);
 
-        // Only release if this product had stock reserved (BUY type)
-        if (product.procurementType === "BUY" && product.reservedQty > 0) {
-          const qtyToRelease = Math.min(line.quantity, product.reservedQty);
-          await recordStockMovement(
-            product.id,
-            qtyToRelease,
-            MovementType.RELEASE,
-            "SALES_ORDER",
-            so.id,
-            companyId
-          );
+          const releaseMovements = await tx.inventoryMovement.findMany({
+            where: {
+              productId: line.productId,
+              referenceType: "SALES_ORDER",
+              referenceId: so.id,
+              movementType: MovementType.RELEASE,
+              companyId,
+            },
+          });
+          const totalReleased = releaseMovements.reduce((sum: number, m: { quantity: number }) => sum + m.quantity, 0);
+
+          const actualQtyToRelease = totalReserved - totalReleased;
+
+          if (actualQtyToRelease > 0) {
+            await recordStockMovement(
+              line.productId,
+              actualQtyToRelease,
+              MovementType.RELEASE,
+              "SALES_ORDER",
+              so.id,
+              companyId,
+              tx
+            );
+          }
         }
-      }
 
-      // Cancel any linked MOs (MTO-{itemId} pattern) that are still cancellable
-      const itemIds = so.items.map((i) => i.id);
-      const linkedMOs = await db.manufacturingOrder.findMany({
-        where: {
-          companyId,
-          moNumber: { in: itemIds.map((itemId) => `MTO-${itemId}`) },
-          status: { in: ["DRAFT", "STARTED"] },
-        },
-      });
-
-      if (linkedMOs.length > 0) {
-        await db.manufacturingOrder.updateMany({
-          where: { id: { in: linkedMOs.map((mo) => mo.id) } },
-          data: { status: "CLOSED" },
+        // Cancel any linked MOs (MTO-{itemId} pattern) that are still cancellable
+        const itemIds = so.items.map((i) => i.id);
+        const linkedMOs = await tx.manufacturingOrder.findMany({
+          where: {
+            companyId,
+            moNumber: { in: itemIds.map((itemId) => `MTO-${itemId}`) },
+            status: { in: ["DRAFT", "STARTED"] },
+          },
         });
-      }
+
+        if (linkedMOs.length > 0) {
+          await tx.manufacturingOrder.updateMany({
+            where: { id: { in: linkedMOs.map((mo) => mo.id) } },
+            data: { status: "CLOSED" },
+          });
+        }
+      });
     }
 
     const cancelled = await db.salesOrder.update({

@@ -47,30 +47,62 @@ export async function POST(
       );
     }
 
-    for (const line of so.items) {
-      // 1. Release the reservation
-      await recordStockMovement(
-        line.productId,
-        line.quantity,
-        MovementType.RELEASE,
-        "SALES_ORDER",
-        so.id,
-        companyId
-      );
-      // 2. Physically decrement stock
-      await recordStockMovement(
-        line.productId,
-        line.quantity,
-        MovementType.OUT,
-        "SALES_ORDER",
-        so.id,
-        companyId
-      );
-    }
+    const delivered = await db.$transaction(async (tx) => {
+      for (const line of so.items) {
+        // Query exact amount reserved vs released for this specific sales order
+        const reserveMovements = await tx.inventoryMovement.findMany({
+          where: {
+            productId: line.productId,
+            referenceType: "SALES_ORDER",
+            referenceId: so.id,
+            movementType: MovementType.RESERVE,
+            companyId,
+          },
+        });
+        const totalReserved = reserveMovements.reduce((sum: number, m: { quantity: number }) => sum + m.quantity, 0);
 
-    const delivered = await db.salesOrder.update({
-      where: { id },
-      data: { status: "DELIVERED" },
+        const releaseMovements = await tx.inventoryMovement.findMany({
+          where: {
+            productId: line.productId,
+            referenceType: "SALES_ORDER",
+            referenceId: so.id,
+            movementType: MovementType.RELEASE,
+            companyId,
+          },
+        });
+        const totalReleased = releaseMovements.reduce((sum: number, m: { quantity: number }) => sum + m.quantity, 0);
+
+        const actualQtyToRelease = totalReserved - totalReleased;
+
+        if (actualQtyToRelease > 0) {
+          // 1. Release the reservation
+          await recordStockMovement(
+            line.productId,
+            actualQtyToRelease,
+            MovementType.RELEASE,
+            "SALES_ORDER",
+            so.id,
+            companyId,
+            tx
+          );
+        }
+
+        // 2. Physically decrement stock
+        await recordStockMovement(
+          line.productId,
+          line.quantity,
+          MovementType.OUT,
+          "SALES_ORDER",
+          so.id,
+          companyId,
+          tx
+        );
+      }
+
+      return await tx.salesOrder.update({
+        where: { id },
+        data: { status: "DELIVERED" },
+      });
     });
 
     await logAudit(companyId, session.user.id, "SalesOrder", so.id, "STATUS_CHANGE", {
@@ -79,8 +111,8 @@ export async function POST(
     });
 
     return NextResponse.json({ success: true, data: delivered });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to deliver Sales Order:", error);
-    return NextResponse.json({ success: false, message: "Internal server error." }, { status: 500 });
+    return NextResponse.json({ success: false, message: error.message || "Failed to deliver Sales Order." }, { status: 400 });
   }
 }

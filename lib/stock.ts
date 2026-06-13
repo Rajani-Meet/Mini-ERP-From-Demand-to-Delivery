@@ -13,7 +13,8 @@ export async function recordStockMovement(
   movementType: MovementType,
   referenceType: string,
   referenceId: string,
-  providedCompanyId?: string
+  providedCompanyId?: string,
+  txClient?: any
 ) {
   if (quantity <= 0) {
     throw new Error("Quantity must be greater than zero.");
@@ -25,7 +26,7 @@ export async function recordStockMovement(
     companyId = await getCompanyId();
   }
 
-  return await db.$transaction(async (tx) => {
+  const execute = async (tx: any) => {
     // 1. Fetch product
     const product = await tx.product.findFirst({
       where: { id: productId, companyId },
@@ -105,5 +106,10 @@ export async function recordStockMovement(
     }
 
     return movement;
-  });
+  };
+
+  if (txClient) {
+    return await execute(txClient);
+  }
+  return await db.$transaction(execute);
 }
