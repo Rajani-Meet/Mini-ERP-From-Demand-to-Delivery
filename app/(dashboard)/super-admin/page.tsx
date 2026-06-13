@@ -15,9 +15,6 @@ import {
   ChevronDown,
   ChevronUp,
   Activity,
-  CheckCircle2,
-  Clock,
-  XCircle,
   Loader2,
 } from "lucide-react";
 

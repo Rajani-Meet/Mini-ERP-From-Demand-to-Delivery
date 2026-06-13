@@ -283,7 +283,6 @@ export default function SuperAdminCompaniesPage() {
     });
 
   const isDrawerOpen = drawerMode !== null;
-  const isUserDrawer = drawerMode === "add-user" || drawerMode === "edit-user" || drawerMode === "reset-password";
 
   return (
     <div className="space-y-6">
