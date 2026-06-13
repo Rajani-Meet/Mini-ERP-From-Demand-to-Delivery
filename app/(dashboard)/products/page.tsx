@@ -3,11 +3,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Package, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import ProductDrawer, { type ProductRow } from "@/components/products/ProductDrawer";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type FilterType = "ALL" | "BUY" | "MAKE" | "LOW_STOCK";
 type SortType = "name" | "stock" | "price";
 
 export default function ProductsPage() {
+  const { currencySymbol } = useBranding();
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -181,10 +183,10 @@ export default function ProductsPage() {
                     <td className="px-5 py-3 font-medium text-slate-100">{p.name}</td>
                     <td className="px-5 py-3 font-mono text-slate-400 text-xs">{p.sku}</td>
                     <td className="px-5 py-3 text-right text-slate-300">
-                      ₹{p.costPrice.toLocaleString("en-IN")}
+                      {currencySymbol}{p.costPrice.toLocaleString("en-IN")}
                     </td>
                     <td className="px-5 py-3 text-right text-slate-300">
-                      ₹{p.salesPrice.toLocaleString("en-IN")}
+                      {currencySymbol}{p.salesPrice.toLocaleString("en-IN")}
                     </td>
                     <td className={`px-5 py-3 text-right font-semibold ${stockColor(p)}`}>
                       {p.onHandQty}

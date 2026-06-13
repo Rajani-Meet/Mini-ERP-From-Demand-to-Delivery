@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ShoppingCart, Plus, AlertCircle, Eye } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type SOStatus = "DRAFT" | "CONFIRMED" | "DELIVERED" | "CANCELLED";
 
@@ -55,6 +56,7 @@ function StatusBadge({ status }: { status: SOStatus }) {
 }
 
 export default function SalesOrdersPage() {
+  const { currencySymbol } = useBranding();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>("ALL");
@@ -170,7 +172,7 @@ export default function SalesOrdersPage() {
                 <tr className="bg-[#07080C] border-b border-[#1E293B] text-slate-400 font-mono uppercase tracking-wider text-[10px]">
                   <th className="px-5 py-3.5">Order #</th>
                   <th className="px-5 py-3.5">Customer</th>
-                  <th className="px-5 py-3.5 text-right">Total (₹)</th>
+                  <th className="px-5 py-3.5 text-right">Total ({currencySymbol})</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5">Created</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
@@ -196,7 +198,7 @@ export default function SalesOrdersPage() {
                       {so.customerName}
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-200">
-                      ₹{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {currencySymbol}{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusBadge status={so.status} />

@@ -17,6 +17,7 @@ import {
   Calendar,
   Hash,
 } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type SOStatus = "DRAFT" | "CONFIRMED" | "DELIVERED" | "CANCELLED";
 
@@ -91,6 +92,7 @@ function SectionHeader({ icon: Icon, label, accent }: { icon: React.ElementType;
 }
 
 export default function SalesOrderDetailPage() {
+  const { currencySymbol } = useBranding();
   const params = useParams<{ id: string }>();
 
   const [so, setSo] = useState<SalesOrder | null>(null);
@@ -319,10 +321,10 @@ export default function SalesOrderDetailPage() {
                     {item.quantity}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono text-slate-400">
-                    ₹{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {currencySymbol}{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-200">
-                    ₹{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {currencySymbol}{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               ))}
@@ -333,7 +335,7 @@ export default function SalesOrderDetailPage() {
                   Order Total
                 </td>
                 <td className="px-5 py-4 text-right font-mono font-extrabold text-indigo-400 text-base">
-                  ₹{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  {currencySymbol}{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             </tfoot>

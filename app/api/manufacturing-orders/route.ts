@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { MOStatus } from "@prisma/client";
 
 export async function GET() {
   try {
@@ -27,13 +28,20 @@ export async function GET() {
             name: true,
             sku: true,
             procurementType: true,
-            bom: {
+          },
+        },
+        components: {
+          include: {
+            product: {
               select: {
                 id: true,
+                name: true,
+                sku: true,
               },
             },
           },
         },
+        workOrders: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -87,8 +95,11 @@ export async function GET() {
         companyId: mo.companyId,
         createdAt: mo.createdAt,
         updatedAt: mo.updatedAt,
-        hasBom: !!mo.product.bom,
-        bomId: mo.product.bom?.id || null,
+        hasBom: !!mo.bomId,
+        bomId: mo.bomId,
+        bomReference: mo.bomReference,
+        components: mo.components,
+        workOrders: mo.workOrders,
         salesOrder: salesOrderInfo,
       };
     });
@@ -114,7 +125,7 @@ export async function POST(req: Request) {
     const companyId = session.user.companyId;
     const body = await req.json();
 
-    const { productId, quantity } = body;
+    const { productId, quantity, bomId } = body;
 
     // Validate inputs
     if (!productId || typeof productId !== "string") {
@@ -141,6 +152,38 @@ export async function POST(req: Request) {
       );
     }
 
+    // Resolve BoM to copy components/work orders from
+    let finalBomId = bomId;
+    if (!finalBomId) {
+      const defaultBom = await db.billOfMaterials.findUnique({
+        where: { productId },
+      });
+      if (defaultBom) {
+        finalBomId = defaultBom.id;
+      }
+    }
+
+    let bomReference = null;
+    let bomComponents: any[] = [];
+    let bomWorkOrders: any[] = [];
+    let bomQuantity = 1;
+
+    if (finalBomId) {
+      const bom = await db.billOfMaterials.findFirst({
+        where: { id: finalBomId, companyId },
+        include: {
+          components: true,
+          workOrders: true,
+        },
+      });
+      if (bom) {
+        bomReference = bom.reference;
+        bomComponents = bom.components;
+        bomWorkOrders = bom.workOrders;
+        bomQuantity = bom.quantity || 1;
+      }
+    }
+
     // Generate a unique MO number (e.g. MO-260613-1234)
     const dateStr = new Date()
       .toISOString()
@@ -149,26 +192,59 @@ export async function POST(req: Request) {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const moNumber = `MO-${dateStr}-${randomSuffix}`;
 
-    // Create the MO in Draft status
-    const mo = await db.manufacturingOrder.create({
-      data: {
-        moNumber,
-        productId,
-        quantity,
-        status: "DRAFT",
-        companyId,
-      },
-    });
+    // Create the MO in Draft status and clone components and work orders
+    const mo = await db.$transaction(async (tx) => {
+      const createdMo = await tx.manufacturingOrder.create({
+        data: {
+          moNumber,
+          productId,
+          quantity,
+          bomId: finalBomId || null,
+          bomReference,
+          status: MOStatus.DRAFT,
+          companyId,
+          components: {
+            create: bomComponents.map((comp) => ({
+              productId: comp.productId,
+              quantity: Math.max(1, Math.round(comp.quantity * (quantity / bomQuantity))),
+            })),
+          },
+          workOrders: {
+            create: bomWorkOrders.map((wo) => ({
+              operation: wo.operation,
+              workCenter: wo.workCenter,
+              expectedDuration: wo.expectedDuration,
+            })),
+          },
+        },
+        include: {
+          components: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                },
+              },
+            },
+          },
+          workOrders: true,
+        },
+      });
 
-    // Log audit
-    await logAudit(
-      companyId,
-      session.user.id,
-      "ManufacturingOrder",
-      mo.id,
-      "CREATE",
-      { after: mo }
-    );
+      // Log audit
+      await logAudit(
+        companyId,
+        session.user.id,
+        "ManufacturingOrder",
+        createdMo.id,
+        "CREATE",
+        { after: createdMo }
+      );
+
+      return createdMo;
+    });
 
     return NextResponse.json({ success: true, data: mo });
   } catch (error) {

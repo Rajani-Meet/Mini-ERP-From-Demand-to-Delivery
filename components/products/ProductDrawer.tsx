@@ -29,6 +29,8 @@ export interface ProductRow {
   procurementType: "BUY" | "MAKE";
 }
 
+import { useBranding } from "@/contexts/BrandingContext";
+
 interface BomInfo {
   id: string;
   productId: string;
@@ -65,6 +67,7 @@ export default function ProductDrawer({
   onClose,
   onSaved,
 }: ProductDrawerProps) {
+  const { currencySymbol } = useBranding();
   const isEdit = !!product;
   const [serverError, setServerError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -286,7 +289,7 @@ export default function ProductDrawer({
                 Cost Price
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">{currencySymbol}</span>
                 <input
                   {...register("costPrice")}
                   type="number"
@@ -305,7 +308,7 @@ export default function ProductDrawer({
                 Sales Price
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">{currencySymbol}</span>
                 <input
                   {...register("salesPrice")}
                   type="number"
