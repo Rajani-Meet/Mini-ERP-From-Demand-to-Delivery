@@ -195,6 +195,18 @@ export async function PATCH(
           );
         }
 
+        // C. Record stock movements atomically in a transaction
+        const updatedMO = await db.$transaction(async (tx) => {
+          // 1. Consume components (OUT)
+          for (const comp of bom.components) {
+            await recordStockMovement(
+              comp.productId,
+              comp.quantity * mo.quantity,
+              MovementType.OUT,
+              "MANUFACTURING_ORDER",
+              mo.id,
+              companyId,
+              tx
         // C. Record stock movements
         await db.$transaction(async (tx) => {
           // 1. Consume components (OUT)
@@ -216,15 +228,41 @@ export async function PATCH(
             MovementType.IN,
             "MANUFACTURING_ORDER",
             mo.id,
-            companyId
+            companyId,
+            tx
           );
 
           // 3. Update MO status
+          return await tx.manufacturingOrder.update({
           await tx.manufacturingOrder.update({
             where: { id },
             data: { status: targetStatus },
           });
         });
+
+        // E. Write status change audit log
+        await logAudit(
+          companyId,
+          session.user.id,
+          "ManufacturingOrder",
+          id,
+          `STATUS_${targetStatus}`,
+          {
+            before: { status: currentStatus },
+            after: { status: targetStatus },
+          }
+        );
+
+        return NextResponse.json({ success: true, data: updatedMO });
+      }
+
+      // Handle other status changes (DRAFT -> STARTED, DRAFT -> CLOSED, etc.)
+      const updatedMO = await db.manufacturingOrder.update({
+        where: { id },
+        data: { status: targetStatus },
+      });
+
+      // Write status change audit log
       } else {
         // Simple status update
         await db.manufacturingOrder.update({

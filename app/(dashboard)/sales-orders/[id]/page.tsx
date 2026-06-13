@@ -17,6 +17,7 @@ import {
   Calendar,
   Hash,
   XCircle,
+  ShoppingBag,
 } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 
@@ -40,6 +41,13 @@ interface LinkedMO {
   status: string;
 }
 
+interface LinkedPO {
+  id: string;
+  poNumber: string;
+  status: string;
+  totalAmount: number;
+}
+
 interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -51,6 +59,7 @@ interface SalesOrder {
   updatedAt: string;
   items: OrderLine[];
   linkedMOs?: LinkedMO[];
+  linkedPOs?: LinkedPO[];
 }
 
 function StatusBadge({ status }: { status: SOStatus }) {
@@ -206,6 +215,7 @@ export default function SalesOrderDetailPage() {
   }
 
   const linkedMOs = so.linkedMOs ?? [];
+  const linkedPOs = so.linkedPOs ?? [];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -403,6 +413,43 @@ export default function SalesOrderDetailPage() {
                 <Link
                   href={`/manufacturing-orders`}
                   id={`mo-link-${mo.id}`}
+                  className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold font-mono transition-colors"
+                >
+                  View →
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Linked Purchase Orders */}
+      {linkedPOs.length > 0 && (
+        <div className="bg-[#0E111A] border border-[#1E293B]/60 rounded-xl p-6 space-y-4">
+          <SectionHeader icon={ShoppingBag} label="Linked Purchase Orders" accent="bg-cyan-500" />
+          <div className="space-y-2">
+            {linkedPOs.map((po) => (
+              <div
+                key={po.id}
+                className="flex items-center justify-between p-3 bg-[#07080C] border border-[#1E293B]/60 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="w-4 h-4 text-cyan-500/60" />
+                  <div>
+                    <span className="text-xs font-semibold text-slate-300">Purchase Order: </span>
+                    <span className="font-mono text-xs text-cyan-400 font-bold">{po.poNumber}</span>
+                  </div>
+                  <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border bg-slate-500/10 text-slate-400 border-slate-500/25">
+                    {po.status}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    ₹{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <Link
+                  href={`/purchase-orders`}
+                  id={`po-link-${po.id}`}
                   className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold font-mono transition-colors"
                 >
                   View →

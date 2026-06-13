@@ -168,7 +168,8 @@ export default function ProductsPage() {
                   <th className="px-5 py-3.5 text-right">Cost</th>
                   <th className="px-5 py-3.5 text-right">Sales</th>
                   <th className="px-5 py-3.5 text-right">On Hand</th>
-                  <th className="px-5 py-3.5 text-right">Available</th>
+                  <th className="px-5 py-3.5 text-right">Reserved</th>
+                  <th className="px-5 py-3.5 text-right">Free to Use</th>
                   <th className="px-5 py-3.5 text-center">Type</th>
                   <th className="px-5 py-3.5 text-center">Actions</th>
                 </tr>
@@ -191,7 +192,10 @@ export default function ProductsPage() {
                     <td className={`px-5 py-3 text-right font-semibold ${stockColor(p)}`}>
                       {p.onHandQty}
                     </td>
-                    <td className="px-5 py-3 text-right font-mono text-slate-300">
+                    <td className="px-5 py-3 text-right font-mono text-slate-400">
+                      {p.reservedQty}
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono text-slate-200 font-bold">
                       {p.onHandQty - p.reservedQty}
                     </td>
                     <td className="px-5 py-3 text-center">

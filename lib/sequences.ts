@@ -6,14 +6,16 @@ import { db } from "./db";
  */
 export async function generateNumber(
   companyId: string,
-  prefix: "SO" | "PO"
+  prefix: "SO" | "PO" | "MO"
 ): Promise<string> {
   let count: number;
 
   if (prefix === "SO") {
     count = await db.salesOrder.count({ where: { companyId } });
-  } else {
+  } else if (prefix === "PO") {
     count = await db.purchaseOrder.count({ where: { companyId } });
+  } else {
+    count = await db.manufacturingOrder.count({ where: { companyId } });
   }
 
   const seq = String(count + 1).padStart(4, "0");
