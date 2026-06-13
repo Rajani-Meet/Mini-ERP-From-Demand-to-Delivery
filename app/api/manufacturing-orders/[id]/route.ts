@@ -91,7 +91,78 @@ export async function PATCH(
         );
       }
 
-      // Handle Completion logic (status -> COMPLETED)
+      // ── Fetch BoM once — needed by STARTED, COMPLETED, and CLOSED transitions ──
+      const bom = await db.billOfMaterials.findFirst({
+        where: { productId: mo.productId, companyId },
+        include: { components: true },
+      });
+
+      // ── DRAFT → STARTED: reserve all components ──────────────────────────────
+      if (targetStatus === MOStatus.STARTED) {
+        if (!bom || bom.components.length === 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Cannot start manufacturing order: a valid Bill of Materials with at least one component must exist.",
+            },
+            { status: 400 }
+          );
+        }
+
+        // Pre-flight: enough stock to reserve?
+        const shortfall: string[] = [];
+        for (const comp of bom.components) {
+          const compProduct = await db.product.findFirst({
+            where: { id: comp.productId, companyId },
+          });
+          const needed = comp.quantity * mo.quantity;
+          if (!compProduct || compProduct.stockQty < needed) {
+            const have = compProduct?.stockQty ?? 0;
+            shortfall.push(
+              `"${compProduct?.name ?? "Unknown"}" (${compProduct?.sku ?? "?"}) — need ${needed}, have ${have}`
+            );
+          }
+        }
+        if (shortfall.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Insufficient stock to reserve components:\n${shortfall.join("\n")}`,
+            },
+            { status: 400 }
+          );
+        }
+
+        // Reserve each component
+        for (const comp of bom.components) {
+          await recordStockMovement(
+            comp.productId,
+            comp.quantity * mo.quantity,
+            MovementType.RESERVE,
+            "MANUFACTURING_ORDER",
+            mo.id,
+            companyId
+          );
+        }
+      }
+
+      // ── STARTED → CLOSED: release all previously reserved components ─────────
+      if (targetStatus === MOStatus.CLOSED && currentStatus === MOStatus.STARTED) {
+        if (bom && bom.components.length > 0) {
+          for (const comp of bom.components) {
+            await recordStockMovement(
+              comp.productId,
+              comp.quantity * mo.quantity,
+              MovementType.RELEASE,
+              "MANUFACTURING_ORDER",
+              mo.id,
+              companyId
+            );
+          }
+        }
+      }
+
+      // ── STARTED → COMPLETED: release reservations, consume stock, produce FG ──
       if (targetStatus === MOStatus.COMPLETED) {
         // A. Validate BoM exists
         const hasBom = await validateBoMExists(mo.productId);
@@ -105,16 +176,11 @@ export async function PATCH(
           );
         }
 
-        const bom = await db.billOfMaterials.findFirst({
-          where: { productId: mo.productId, companyId },
-          include: { components: true },
-        });
-
         if (!bom) {
           return NextResponse.json({ success: false, message: "Failed to retrieve BoM." }, { status: 400 });
         }
 
-        // B. Pre-flight check: Verify sufficient stock for all components before any movements
+        // B. Pre-flight check: Verify sufficient actual stock for all components
         const insufficientComponents: string[] = [];
         for (const comp of bom.components) {
           const compProduct = await db.product.findFirst({
@@ -142,8 +208,20 @@ export async function PATCH(
           );
         }
 
-        // C. Record stock movements (within separate transactions sequentially)
-        // 1. Consume components (OUT)
+        // C. Release reservations first (RELEASE), then consume (OUT), then produce (IN)
+        for (const comp of bom.components) {
+          // Release the reservation placed when MO was started
+          await recordStockMovement(
+            comp.productId,
+            comp.quantity * mo.quantity,
+            MovementType.RELEASE,
+            "MANUFACTURING_ORDER",
+            mo.id,
+            companyId
+          );
+        }
+
+        // Consume components (OUT)
         for (const comp of bom.components) {
           await recordStockMovement(
             comp.productId,
@@ -155,7 +233,7 @@ export async function PATCH(
           );
         }
 
-        // 2. Add finished goods (IN)
+        // Add finished goods (IN)
         await recordStockMovement(
           mo.productId,
           mo.quantity,
