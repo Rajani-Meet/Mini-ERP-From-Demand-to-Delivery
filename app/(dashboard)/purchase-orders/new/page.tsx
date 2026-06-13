@@ -32,6 +32,7 @@ export default function NewPurchaseOrderPage() {
 
   const [vendorId, setVendorId] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
+  const [vendorInputValue, setVendorInputValue] = useState("");
   const [lines, setLines] = useState<OrderLine[]>([
     { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0, orderedQtyRaw: "1", unitCostRaw: "0" },
   ]);
@@ -127,7 +128,6 @@ export default function NewPurchaseOrderPage() {
       v.email.toLowerCase().includes(vendorSearch.toLowerCase())
   );
 
-  const selectedVendor = vendors.find((v) => v.id === vendorId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,13 +218,23 @@ export default function NewPurchaseOrderPage() {
                 <input
                   type="text"
                   placeholder={isFetching ? "Loading vendors…" : "Search vendor…"}
-                  value={vendorSearch || (selectedVendor?.name ?? "")}
+                  value={vendorInputValue}
                   onChange={(e) => {
+                    setVendorInputValue(e.target.value);
                     setVendorSearch(e.target.value);
                     if (!e.target.value) setVendorId("");
                   }}
+                  onFocus={() => {
+                    // Re-open dropdown if a vendor is already selected and user focuses again
+                    if (vendorId) setVendorSearch(vendorInputValue);
+                  }}
+                  onBlur={() => {
+                    // Small delay so click on dropdown item fires before blur hides it
+                    setTimeout(() => setVendorSearch(""), 150);
+                  }}
                   id="input-vendor-search"
                   disabled={isFetching}
+                  autoComplete="off"
                   className="w-full bg-[#07080C] border border-[#1E293B] hover:border-emerald-500/30 focus:border-emerald-500 text-slate-200 text-xs px-3 py-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:outline-none placeholder-slate-600 transition-all"
                 />
                 {vendorSearch && filteredVendors.length > 0 && (
@@ -234,8 +244,10 @@ export default function NewPurchaseOrderPage() {
                         key={v.id}
                         type="button"
                         className="w-full px-3 py-2.5 text-left hover:bg-emerald-500/10 text-slate-200 text-xs flex flex-col transition-colors border-b border-[#1E293B]/30 last:border-0"
+                        onMouseDown={(e) => e.preventDefault()} // prevent blur before click
                         onClick={() => {
                           setVendorId(v.id);
+                          setVendorInputValue(v.name);
                           setVendorSearch("");
                         }}
                       >
@@ -245,9 +257,16 @@ export default function NewPurchaseOrderPage() {
                     ))}
                   </div>
                 )}
+                {vendorSearch && filteredVendors.length === 0 && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-[#0E111A] border border-[#1E293B] rounded-lg shadow-2xl px-3 py-3 text-slate-500 text-xs">
+                    No vendors found.
+                  </div>
+                )}
               </div>
-              {selectedVendor && (
-                <p className="text-[10px] text-slate-500 font-mono ml-1">{selectedVendor.email}</p>
+              {vendorId && (
+                <p className="text-[10px] text-emerald-500/70 font-mono ml-1 flex items-center gap-1">
+                  ✓ {vendors.find((v) => v.id === vendorId)?.email}
+                </p>
               )}
             </div>
 

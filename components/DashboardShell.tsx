@@ -18,6 +18,7 @@ import {
   Globe,
   Users,
   FileSpreadsheet,
+  Truck,
 } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 
@@ -72,6 +73,7 @@ export default function DashboardShell({
     { name: "Stock Ledger", href: "/stock-ledger", icon: Database },
     { name: "Sales", href: "/sales-orders", icon: ShoppingCart },
     { name: "Purchases", href: "/purchase-orders", icon: TrendingDown },
+    { name: "Vendors", href: "/vendors", icon: Truck },
     { name: "Manufacturing", href: "/manufacturing-orders", icon: Factory },
     { name: "Users", href: "/users", icon: Users },
     { name: "Audit Logs", href: "/audit-logs", icon: Shield },
@@ -95,6 +97,7 @@ export default function DashboardShell({
       if (item.name === "Stock Ledger" && user.canAccessStockLedger === false) return false;
       if (item.name === "Sales" && user.canAccessSales === false) return false;
       if (item.name === "Purchases" && user.canAccessPurchases === false) return false;
+      if (item.name === "Vendors" && user.canAccessPurchases === false) return false;
       if (item.name === "Manufacturing" && user.canAccessManufacturing === false) return false;
       if (item.name === "Users" && user.role !== "ADMIN") return false;
       if (item.name === "Audit Logs" && user.canAccessAuditLogs === false) return false;
