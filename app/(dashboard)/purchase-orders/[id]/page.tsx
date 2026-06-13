@@ -18,6 +18,7 @@ import {
   Calendar,
   Hash,
 } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type POStatus = "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
 
@@ -274,6 +275,7 @@ function ReceiptDrawer({ isOpen, onClose, po, onSuccess }: ReceiptDrawerProps) {
 
 // ─── Detail Page ─────────────────────────────────────────────────────────────
 export default function PurchaseOrderDetailPage() {
+  const { currencySymbol } = useBranding();
   const params = useParams<{ id: string }>();
 
   const [po, setPo] = useState<PurchaseOrder | null>(null);
@@ -488,7 +490,7 @@ export default function PurchaseOrderDetailPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-slate-400">
-                        ₹{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        {currencySymbol}{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-300">
                         {item.quantity}
@@ -502,7 +504,7 @@ export default function PurchaseOrderDetailPage() {
                         <ProgressBar received={item.receivedQty} ordered={item.quantity} />
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-200">
-                        ₹{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        {currencySymbol}{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   );
@@ -514,7 +516,7 @@ export default function PurchaseOrderDetailPage() {
                     Order Total
                   </td>
                   <td className="px-5 py-4 text-right font-mono font-extrabold text-emerald-400 text-base">
-                    ₹{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {currencySymbol}{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               </tfoot>

@@ -17,6 +17,9 @@ import {
   EyeOff,
   AlertTriangle,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
 
 interface UserSelectorItem {
   id: string;
@@ -39,12 +42,15 @@ interface AuditLogItem {
   createdAt: string;
 }
 
-export default function AuditLogsPage() {
+export function AuditLogsContent() {
   const { data: session } = useSession();
   const userRole = (session?.user?.role as Role) || "VIEWER";
 
   // Check read permission
   const canRead = can(userRole, "read", "AuditLog");
+
+  const searchParams = useSearchParams();
+  const initialEntity = searchParams.get("entity") || "ALL";
 
   // State Management
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
@@ -54,7 +60,7 @@ export default function AuditLogsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Filters State
-  const [entityFilter, setEntityFilter] = useState("ALL");
+  const [entityFilter, setEntityFilter] = useState(initialEntity);
   const [userFilter, setUserFilter] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -408,5 +414,13 @@ export default function AuditLogsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AuditLogsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-24 text-slate-500 font-mono text-xs">Loading audit logging dashboard...</div>}>
+      <AuditLogsContent />
+    </Suspense>
   );
 }

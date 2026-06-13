@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { TrendingDown, Plus, Trash2, AlertCircle, ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface Product {
   id: string;
@@ -28,6 +29,7 @@ interface OrderLine {
 }
 
 export default function NewPurchaseOrderPage() {
+  const { currencySymbol } = useBranding();
   const router = useRouter();
 
   const [vendorId, setVendorId] = useState("");
@@ -306,8 +308,8 @@ export default function NewPurchaseOrderPage() {
                 <tr className="border-b border-[#1E293B] text-slate-500 font-mono uppercase text-[10px]">
                   <th className="pb-2 text-left pr-3">Product</th>
                   <th className="pb-2 text-right w-24 px-2">Ordered Qty</th>
-                  <th className="pb-2 text-right w-32 px-2">Unit Cost (₹)</th>
-                  <th className="pb-2 text-right w-32 px-2">Subtotal (₹)</th>
+                  <th className="pb-2 text-right w-32 px-2">Unit Cost ({currencySymbol})</th>
+                  <th className="pb-2 text-right w-32 px-2">Subtotal ({currencySymbol})</th>
                   <th className="pb-2 w-10" />
                 </tr>
               </thead>
@@ -389,7 +391,7 @@ export default function NewPurchaseOrderPage() {
                         />
                       </td>
                       <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-300">
-                        ₹
+                        {currencySymbol}
                         {(line.orderedQty * line.unitCost).toLocaleString("en-IN", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -419,7 +421,7 @@ export default function NewPurchaseOrderPage() {
                     Order Total
                   </td>
                   <td className="pt-4 px-2 text-right font-mono font-extrabold text-emerald-400 text-base">
-                    ₹
+                    {currencySymbol}
                     {total.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,

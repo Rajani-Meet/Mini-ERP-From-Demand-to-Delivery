@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TrendingDown, Plus, AlertCircle, Eye } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type POStatus = "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
 
@@ -60,6 +61,7 @@ function StatusBadge({ status }: { status: POStatus }) {
 }
 
 export default function PurchaseOrdersPage() {
+  const { currencySymbol } = useBranding();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>("ALL");
@@ -176,7 +178,7 @@ export default function PurchaseOrdersPage() {
                 <tr className="bg-[#07080C] border-b border-[#1E293B] text-slate-400 font-mono uppercase tracking-wider text-[10px]">
                   <th className="px-5 py-3.5">PO #</th>
                   <th className="px-5 py-3.5">Vendor</th>
-                  <th className="px-5 py-3.5 text-right">Total (₹)</th>
+                  <th className="px-5 py-3.5 text-right">Total ({currencySymbol})</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5">Created</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
@@ -202,7 +204,7 @@ export default function PurchaseOrdersPage() {
                       {po.vendor.name}
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-200">
-                      ₹{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {currencySymbol}{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusBadge status={po.status} />

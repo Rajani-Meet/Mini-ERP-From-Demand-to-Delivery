@@ -58,6 +58,12 @@ export async function POST(
       );
     }
 
+    const company = await db.company.findUnique({
+      where: { id: companyId },
+      select: { autoCreateMO: true },
+    });
+    const autoCreateMO = company?.autoCreateMO ?? true;
+
     const linkedMoIds: string[] = [];
     const linkedPoIds: string[] = [];
 
@@ -144,9 +150,17 @@ export async function POST(
           }
         }
       } else {
+<<<<<<< HEAD
         // MAKE product -> trigger MO
         const moId = await createManufacturingOrderFromSO(line.id);
         linkedMoIds.push(moId);
+=======
+        // MAKE product OR BUY with insufficient stock → trigger MO if enabled
+        if (autoCreateMO) {
+          const moId = await createManufacturingOrderFromSO(line.id);
+          linkedMoIds.push(moId);
+        }
+>>>>>>> 3800079912457f2df37a72396f61cb4c6bbb6d80
       }
     }
 
