@@ -16,6 +16,7 @@ import {
   MapPin,
   Calendar,
   Hash,
+  XCircle,
 } from "lucide-react";
 
 type SOStatus = "DRAFT" | "CONFIRMED" | "DELIVERED" | "CANCELLED";
@@ -95,7 +96,7 @@ export default function SalesOrderDetailPage() {
 
   const [so, setSo] = useState<SalesOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<"confirm" | "deliver" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"confirm" | "deliver" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -153,6 +154,27 @@ export default function SalesOrderDetailPage() {
         await fetchSO();
       } else {
         setError(data.message || "Failed to deliver order.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!confirm("Are you sure you want to cancel this Sales Order? This cannot be undone.")) return;
+    setActionLoading("cancel");
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/sales-orders/${params.id}/cancel`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess("Sales Order has been cancelled. Reserved stock released.");
+        await fetchSO();
+      } else {
+        setError(data.message || "Failed to cancel order.");
       }
     } catch {
       setError("Network error. Please try again.");
@@ -231,6 +253,21 @@ export default function SalesOrderDetailPage() {
                   <Truck className="w-3.5 h-3.5" />
                 )}
                 {actionLoading === "deliver" ? "Processing…" : "Mark Delivered"}
+              </button>
+            )}
+            {(so.status === "DRAFT" || so.status === "CONFIRMED") && (
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading !== null}
+                id="btn-cancel-so"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/40 hover:border-rose-500/70 disabled:opacity-50 text-rose-400 font-bold text-xs font-mono rounded-lg transition-all active:scale-95"
+              >
+                {actionLoading === "cancel" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5" />
+                )}
+                {actionLoading === "cancel" ? "Cancelling…" : "Cancel Order"}
               </button>
             )}
           </div>

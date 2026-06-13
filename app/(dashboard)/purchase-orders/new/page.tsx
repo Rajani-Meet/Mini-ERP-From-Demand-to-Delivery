@@ -23,6 +23,8 @@ interface OrderLine {
   productId: string;
   orderedQty: number;
   unitCost: number;
+  orderedQtyRaw: string;
+  unitCostRaw: string;
 }
 
 export default function NewPurchaseOrderPage() {
@@ -31,7 +33,7 @@ export default function NewPurchaseOrderPage() {
   const [vendorId, setVendorId] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
   const [lines, setLines] = useState<OrderLine[]>([
-    { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0 },
+    { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0, orderedQtyRaw: "1", unitCostRaw: "0" },
   ]);
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -64,7 +66,7 @@ export default function NewPurchaseOrderPage() {
   const addLine = () => {
     setLines((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0 },
+      { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0, orderedQtyRaw: "1", unitCostRaw: "0" },
     ]);
   };
 
@@ -83,10 +85,29 @@ export default function NewPurchaseOrderPage() {
         const updated = { ...l, [field]: value };
         if (field === "productId") {
           const product = products.find((p) => p.id === value);
-          if (product) updated.unitCost = product.costPrice;
+          if (product) {
+            updated.unitCost = product.costPrice;
+            updated.unitCostRaw = String(product.costPrice);
+          }
         }
         return updated;
       })
+    );
+  };
+
+  const updateOrderedQtyRaw = (id: string, raw: string) => {
+    const parsed = parseInt(raw);
+    const orderedQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, orderedQtyRaw: raw, orderedQty }))
+    );
+  };
+
+  const updateUnitCostRaw = (id: string, raw: string) => {
+    const parsed = parseFloat(raw);
+    const unitCost = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, unitCostRaw: raw, unitCost }))
     );
   };
 
@@ -329,14 +350,9 @@ export default function NewPurchaseOrderPage() {
                         <input
                           type="number"
                           min={1}
-                          value={line.orderedQty}
-                          onChange={(e) =>
-                            updateLine(
-                              line.id,
-                              "orderedQty",
-                              Math.max(1, parseInt(e.target.value) || 1)
-                            )
-                          }
+                          value={line.orderedQtyRaw}
+                          onChange={(e) => updateOrderedQtyRaw(line.id, e.target.value)}
+                          onBlur={() => updateOrderedQtyRaw(line.id, String(line.orderedQty))}
                           id={`po-line-qty-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-emerald-500/60 transition-all"
                         />
@@ -346,10 +362,9 @@ export default function NewPurchaseOrderPage() {
                           type="number"
                           min={0}
                           step="0.01"
-                          value={line.unitCost}
-                          onChange={(e) =>
-                            updateLine(line.id, "unitCost", parseFloat(e.target.value) || 0)
-                          }
+                          value={line.unitCostRaw}
+                          onChange={(e) => updateUnitCostRaw(line.id, e.target.value)}
+                          onBlur={() => updateUnitCostRaw(line.id, String(line.unitCost))}
                           id={`po-line-cost-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-emerald-500/60 transition-all"
                         />
