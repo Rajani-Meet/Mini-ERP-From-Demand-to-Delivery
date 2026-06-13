@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 
+<<<<<<< HEAD
 export interface CurrentUser {
   id: string;
   name: string;
@@ -25,4 +26,13 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     role: session.user.role,
     companyId: session.user.companyId,
   };
+=======
+/**
+ * Returns the full session user object, or null if not authenticated.
+ * Convenience wrapper for server components and API routes.
+ */
+export async function getCurrentUser() {
+  const session = await getServerSession(authOptions);
+  return session?.user ?? null;
+>>>>>>> d44af0d (feat: add Products, Stock Ledger, and Company Settings modules)
 }

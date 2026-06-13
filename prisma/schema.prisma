@@ -57,6 +57,7 @@ model Company {
   id                   String                 @id @default(uuid())
   name                 String
   logoUrl              String?
+  accentColor          String?                @default("#6366f1") // indigo default
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   users                User[]
@@ -86,13 +87,14 @@ model User {
 
 model Product {
   id                  String                 @id @default(uuid())
-  sku                 String                 @unique
+  sku                 String
   name                String
   description         String?
   costPrice           Float
   stockPrice          Float                  // salesPrice
   stockQty            Int                    @default(0) // onHandQty
   reservedQty         Int                    @default(0)
+  reorderPoint        Int                    @default(0)
   procurementType     ProcurementType        @default(BUY)
   companyId           String
   company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -104,6 +106,8 @@ model Product {
   inventoryMovements  InventoryMovement[]
   bom                 BillOfMaterials?       @relation("ProductBoM")
   bomComponents       BoMComponent[]
+
+  @@unique([sku, companyId])
 }
 
 model Vendor {

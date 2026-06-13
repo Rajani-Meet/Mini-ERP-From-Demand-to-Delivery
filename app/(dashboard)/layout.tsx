@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import DashboardShell from "@/components/DashboardShell";
+import { BrandingProvider } from "@/contexts/BrandingContext";
 
 export default async function DashboardLayout({
   children,
@@ -18,12 +19,13 @@ export default async function DashboardLayout({
   // Fetch company branding information from the database
   const company = await db.company.findUnique({
     where: { id: session.user.companyId },
-    select: { name: true, logoUrl: true },
+    select: { name: true, logoUrl: true, accentColor: true },
   });
 
-  const branding = {
+  const initialBranding = {
     companyName: company?.name ?? "Nexus ERP",
     logoUrl: company?.logoUrl ?? null,
+    accentColor: company?.accentColor ?? "#6366f1",
   };
 
   const user = {
@@ -34,8 +36,10 @@ export default async function DashboardLayout({
   };
 
   return (
-    <DashboardShell branding={branding} user={user}>
-      {children}
-    </DashboardShell>
+    <BrandingProvider initial={initialBranding}>
+      <DashboardShell branding={initialBranding} user={user}>
+        {children}
+      </DashboardShell>
+    </BrandingProvider>
   );
 }

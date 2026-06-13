@@ -13,15 +13,19 @@ import {
   Database,
   Shield,
   LogOut,
+  Settings,
 } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface DashboardShellProps {
   children: React.ReactNode;
   branding: {
     companyName: string;
     logoUrl: string | null;
+    accentColor: string;
   };
   user: {
+    id?: string;
     name: string;
     email: string;
     role: string;
@@ -30,10 +34,24 @@ interface DashboardShellProps {
 
 export default function DashboardShell({
   children,
-  branding,
+  branding: initialBranding,
   user,
 }: DashboardShellProps) {
   const pathname = usePathname();
+
+  // Prefer live branding from context (updated after settings save)
+  let branding = initialBranding;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const ctx = useBranding();
+    branding = {
+      companyName: ctx.companyName,
+      logoUrl: ctx.logoUrl,
+      accentColor: ctx.accentColor,
+    };
+  } catch {
+    // BrandingContext not available in some test contexts — fall back to props
+  }
 
   // Navigation Items matching the 4-person modules
   const navItems = [
@@ -44,6 +62,7 @@ export default function DashboardShell({
     { name: "Purchases", href: "/purchase-orders", icon: TrendingDown },
     { name: "Manufacturing", href: "/manufacturing-orders", icon: Factory },
     { name: "Audit Logs", href: "/audit-logs", icon: Shield },
+    { name: "Settings", href: "/settings", icon: Settings },
   ];
 
   // Fallback avatar letter
@@ -65,7 +84,14 @@ export default function DashboardShell({
               className="w-8 h-8 object-contain rounded border border-amber-500/20"
             />
           ) : (
-            <div className="w-8 h-8 bg-amber-500/10 border border-amber-500/40 rounded flex items-center justify-center font-bold text-amber-500 text-sm">
+            <div
+              className="w-8 h-8 rounded flex items-center justify-center font-bold text-white text-sm border"
+              style={{
+                backgroundColor: branding.accentColor + "22",
+                borderColor: branding.accentColor + "66",
+                color: branding.accentColor,
+              }}
+            >
               {avatarLetter}
             </div>
           )}
@@ -111,7 +137,9 @@ export default function DashboardShell({
         <nav className="flex items-center gap-1 bg-[#0E111A]/90 border border-[#1E293B]/80 px-4 py-2.5 rounded-2xl shadow-2xl shadow-black/80 backdrop-blur-lg">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/" && pathname?.startsWith(item.href));
 
             return (
               <Link
@@ -122,7 +150,7 @@ export default function DashboardShell({
                     ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                     : "text-slate-400 hover:text-slate-200 border border-transparent"
                 }`}
-                id={`nav-${item.name.toLowerCase().replace(" ", "-")}`}
+                id={`nav-${item.name.toLowerCase().replace(/\s/g, "-")}`}
               >
                 <Icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
                 <span className="text-[10px] font-semibold hidden md:block">
