@@ -1,0 +1,232 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProcurementType {
+  BUY
+  MAKE
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  DELIVERED
+  CLOSED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  RECEIVED
+  CLOSED
+}
+
+enum MOStatus {
+  DRAFT
+  STARTED
+  COMPLETED
+  CLOSED
+}
+
+enum MovementType {
+  IN
+  OUT
+  RESERVE
+  RELEASE
+}
+
+model Company {
+  id                   String                 @id @default(uuid())
+  name                 String
+  logoUrl              String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  users                User[]
+  products             Product[]
+  vendors              Vendor[]
+  salesOrders          SalesOrder[]
+  purchaseOrders       PurchaseOrder[]
+  manufacturingOrders  ManufacturingOrder[]
+  inventoryMovements   InventoryMovement[]
+  auditLogs            AuditLog[]
+  billOfMaterials      BillOfMaterials[]
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  role         Role       @default(VIEWER)
+  status       UserStatus @default(ACTIVE)
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Product {
+  id                  String                 @id @default(uuid())
+  sku                 String                 @unique
+  name                String
+  description         String?
+  costPrice           Float
+  stockPrice          Float                  // salesPrice
+  stockQty            Int                    @default(0) // onHandQty
+  reservedQty         Int                    @default(0)
+  procurementType     ProcurementType        @default(BUY)
+  companyId           String
+  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  salesOrderItems     SalesOrderItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  manufacturingOrders ManufacturingOrder[]
+  inventoryMovements  InventoryMovement[]
+  bom                 BillOfMaterials?       @relation("ProductBoM")
+  bomComponents       BoMComponent[]
+}
+
+model Vendor {
+  id             String          @id @default(uuid())
+  name           String
+  email          String
+  phone          String
+  companyId      String
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+}
+
+model SalesOrder {
+  id           String           @id @default(uuid())
+  orderNumber  String           @unique
+  customerName String
+  status       SalesOrderStatus @default(DRAFT)
+  totalAmount  Float            @default(0.0)
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  items        SalesOrderItem[]
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Int
+  unitPrice    Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  poNumber    String              @unique
+  vendorId    String
+  vendor      Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  status      PurchaseOrderStatus @default(DRAFT)
+  totalAmount Float               @default(0.0)
+  companyId   String
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  items       PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity        Int
+  unitPrice       Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model ManufacturingOrder {
+  id        String   @id @default(uuid())
+  moNumber  String   @unique
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+  status    MOStatus @default(DRAFT)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BillOfMaterials {
+  id          String         @id @default(uuid())
+  productId   String         @unique
+  product     Product        @relation("ProductBoM", fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Int            @default(1) // Output quantity for this BoM
+  companyId   String
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  components  BoMComponent[]
+}
+
+model BoMComponent {
+  id          String          @id @default(uuid())
+  bomId       String
+  bom         BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Int
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model InventoryMovement {
+  id            String       @id @default(uuid())
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int
+  movementType  MovementType
+  referenceType String       // e.g., "SALES_ORDER", "PURCHASE_ORDER", "MANUFACTURING_ORDER", "MANUAL"
+  referenceId   String       // ID of the related transaction
+  balanceAfter  Int
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  entity    String   // e.g., "Product", "SalesOrder", "User", etc.
+  entityId  String   // ID of the record audited
+  action    String   // e.g., "CREATE", "UPDATE", "DELETE", "LOGIN"
+  oldValue  String?  // JSON representation of old fields
+  newValue  String?  // JSON representation of new fields
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
