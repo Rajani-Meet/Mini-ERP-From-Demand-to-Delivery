@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { MovementType } from "@prisma/client";
 import { getCompanyId } from "./tenant";
+import { triggerReorderIfNeeded } from "./reorder";
 
 /**
  * Records an inventory movement, updates product stock counts, and writes logs.
@@ -97,6 +98,11 @@ export async function recordStockMovement(
         companyId,
       },
     });
+
+    // 6. Auto-create a DRAFT PO if stock fell below reorder point
+    if (movementType === MovementType.OUT) {
+      await triggerReorderIfNeeded(tx, productId, companyId, newStockQty);
+    }
 
     return movement;
   });
