@@ -18,6 +18,7 @@ import {
   Globe,
   Users,
   FileSpreadsheet,
+  Truck,
 } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 
@@ -72,6 +73,7 @@ export default function DashboardShell({
     { name: "Stock Ledger", href: "/stock-ledger", icon: Database },
     { name: "Sales", href: "/sales-orders", icon: ShoppingCart },
     { name: "Purchases", href: "/purchase-orders", icon: TrendingDown },
+    { name: "Vendors", href: "/vendors", icon: Truck },
     { name: "Manufacturing", href: "/manufacturing-orders", icon: Factory },
     { name: "Users", href: "/users", icon: Users },
     { name: "Audit Logs", href: "/audit-logs", icon: Shield },
@@ -85,6 +87,7 @@ export default function DashboardShell({
       { name: "Dashboard", href: "/super-admin", icon: Globe },
       { name: "Companies", href: "/super-admin/companies", icon: Building2 },
       { name: "Users", href: "/super-admin/users", icon: Users },
+      { name: "Audit Logs", href: "/audit-logs", icon: Shield },
       { name: "Settings", href: "/settings", icon: Settings },
     ];
   } else {
@@ -95,6 +98,7 @@ export default function DashboardShell({
       if (item.name === "Stock Ledger" && user.canAccessStockLedger === false) return false;
       if (item.name === "Sales" && user.canAccessSales === false) return false;
       if (item.name === "Purchases" && user.canAccessPurchases === false) return false;
+      if (item.name === "Vendors" && user.canAccessPurchases === false) return false;
       if (item.name === "Manufacturing" && user.canAccessManufacturing === false) return false;
       if (item.name === "Users" && user.role !== "ADMIN") return false;
       if (item.name === "Audit Logs" && user.canAccessAuditLogs === false) return false;
@@ -112,7 +116,7 @@ export default function DashboardShell({
       <div className="absolute bottom-0 left-0 w-[600px] h-[350px] bg-slate-900/40 rounded-full blur-[140px] pointer-events-none" />
 
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-[#07080C]/80 backdrop-blur-md border-b border-[#1E293B]/60 px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-[#07080C]/80 backdrop-blur-md border-b border-[#1E293B]/60 px-6 py-4 flex items-center justify-between no-print">
         <div className="flex items-center gap-3">
           {branding.logoUrl ? (
             <img
@@ -170,7 +174,7 @@ export default function DashboardShell({
       </main>
 
       {/* Floating Bottom Dock Navigation */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 no-print">
         <nav className="flex items-center gap-1 bg-[#0E111A]/90 border border-[#1E293B]/80 px-4 py-2.5 rounded-2xl shadow-2xl shadow-black/80 backdrop-blur-lg">
           {filteredNavItems.map((item) => {
             const Icon = item.icon;

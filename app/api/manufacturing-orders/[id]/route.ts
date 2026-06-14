@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
-import { validateBoMExists } from "@/lib/bom";
 import { recordStockMovement } from "@/lib/stock";
 import { logAudit } from "@/lib/audit";
 import { MovementType, MOStatus } from "@prisma/client";
@@ -26,7 +25,7 @@ export async function PATCH(
     const companyId = session.user.companyId;
     const body = await req.json();
 
-    const { status: targetStatus, quantity } = body;
+    const { status: targetStatus, quantity, bomId } = body;
 
     // Fetch existing MO
     const mo = await db.manufacturingOrder.findFirst({
@@ -37,44 +36,101 @@ export async function PATCH(
       return NextResponse.json({ success: false, message: "Manufacturing order not found." }, { status: 404 });
     }
 
-    // 1. Handle Quantity Update (Only allowed in DRAFT status)
-    if (quantity !== undefined && quantity !== mo.quantity) {
+    // ── 1. Handle Quantity / BoM updates (DRAFT only) ────────────────────────
+    if (
+      (quantity !== undefined && quantity !== mo.quantity) ||
+      (bomId !== undefined && bomId !== mo.bomId)
+    ) {
       if (mo.status !== MOStatus.DRAFT) {
         return NextResponse.json(
-          { success: false, message: "Quantity can only be modified in Draft status." },
+          { success: false, message: "Quantity and BoM can only be modified in Draft status." },
           { status: 400 }
         );
       }
 
-      if (typeof quantity !== "number" || quantity <= 0) {
-        return NextResponse.json({ success: false, message: "Quantity must be greater than 0." }, { status: 400 });
+      const finalQuantity = quantity !== undefined ? quantity : mo.quantity;
+      const finalBomId = bomId !== undefined ? bomId : mo.bomId;
+
+      if (typeof finalQuantity !== "number" || finalQuantity <= 0) {
+        return NextResponse.json(
+          { success: false, message: "Quantity must be greater than 0." },
+          { status: 400 }
+        );
       }
 
-      const updatedMO = await db.manufacturingOrder.update({
-        where: { id },
-        data: { quantity },
-      });
+      try {
+        const updatedMO = await db.$transaction(async (tx) => {
+          let bomRef = mo.bomReference;
 
-      await logAudit(
-        companyId,
-        session.user.id,
-        "ManufacturingOrder",
-        id,
-        "UPDATE",
-        {
-          before: { quantity: mo.quantity },
-          after: { quantity },
-        }
-      );
+          if (finalBomId) {
+            const bom = await tx.billOfMaterials.findFirst({
+              where: { id: finalBomId, companyId },
+              include: { components: true, workOrders: true },
+            });
 
-      return NextResponse.json({ success: true, data: updatedMO });
+            if (!bom) throw new Error("BoM not found.");
+
+            bomRef = bom.reference;
+
+            // Replace components and work orders scaled to new quantity
+            await tx.mOComponent.deleteMany({ where: { moId: id } });
+            await tx.mOWorkOrder.deleteMany({ where: { moId: id } });
+
+            await tx.mOComponent.createMany({
+              data: bom.components.map((comp) => ({
+                moId: id,
+                productId: comp.productId,
+                quantity: Math.max(
+                  1,
+                  Math.round(comp.quantity * (finalQuantity / (bom.quantity || 1)))
+                ),
+              })),
+            });
+
+            await tx.mOWorkOrder.createMany({
+              data: bom.workOrders.map((wo) => ({
+                moId: id,
+                operation: wo.operation,
+                workCenter: wo.workCenter,
+                expectedDuration: wo.expectedDuration,
+              })),
+            });
+          } else {
+            await tx.mOComponent.deleteMany({ where: { moId: id } });
+            await tx.mOWorkOrder.deleteMany({ where: { moId: id } });
+            bomRef = null;
+          }
+
+          const result = await tx.manufacturingOrder.update({
+            where: { id },
+            data: {
+              quantity: finalQuantity,
+              bomId: finalBomId || null,
+              bomReference: bomRef,
+            },
+            include: { components: true, workOrders: true },
+          });
+
+          await logAudit(companyId, session.user.id, "ManufacturingOrder", id, "UPDATE", {
+            before: { quantity: mo.quantity, bomId: mo.bomId, bomReference: mo.bomReference },
+            after: { quantity: result.quantity, bomId: result.bomId, bomReference: result.bomReference },
+          });
+
+          return result;
+        });
+
+        return NextResponse.json({ success: true, data: updatedMO });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Failed to update manufacturing order.";
+        return NextResponse.json({ success: false, message: msg }, { status: 400 });
+      }
     }
 
-    // 2. Handle Status Transitions
+    // ── 2. Handle Status Transitions ─────────────────────────────────────────
     if (targetStatus) {
       const currentStatus = mo.status;
 
-      // Validate transition rules
+      // Validate allowed transitions
       let isValidTransition = false;
       if (currentStatus === MOStatus.DRAFT) {
         isValidTransition = [MOStatus.STARTED, MOStatus.CLOSED].includes(targetStatus);
@@ -91,44 +147,39 @@ export async function PATCH(
         );
       }
 
-      // ── Fetch BoM once — needed by STARTED, COMPLETED, and CLOSED transitions ──
+      // Fetch BoM (needed for RESERVE / RELEASE on STARTED / CLOSED)
       const bom = await db.billOfMaterials.findFirst({
         where: { productId: mo.productId, companyId },
         include: { components: true },
       });
 
-      // ── DRAFT → STARTED: reserve all components ──────────────────────────────
+      // ── DRAFT → STARTED: reserve components ────────────────────────────────
       if (targetStatus === MOStatus.STARTED) {
         if (!bom || bom.components.length === 0) {
           return NextResponse.json(
             {
               success: false,
-              message: "Cannot start manufacturing order: a valid Bill of Materials with at least one component must exist.",
+              message:
+                "Cannot start: a valid Bill of Materials with at least one component must exist.",
             },
             { status: 400 }
           );
         }
 
-        // Pre-flight: enough stock to reserve?
+        // Pre-flight stock check
         const shortfall: string[] = [];
         for (const comp of bom.components) {
-          const compProduct = await db.product.findFirst({
-            where: { id: comp.productId, companyId },
-          });
+          const product = await db.product.findFirst({ where: { id: comp.productId, companyId } });
           const needed = comp.quantity * mo.quantity;
-          if (!compProduct || compProduct.stockQty < needed) {
-            const have = compProduct?.stockQty ?? 0;
+          if (!product || product.stockQty < needed) {
             shortfall.push(
-              `"${compProduct?.name ?? "Unknown"}" (${compProduct?.sku ?? "?"}) — need ${needed}, have ${have}`
+              `"${product?.name ?? "Unknown"}" (${product?.sku ?? "?"}) — need ${needed}, have ${product?.stockQty ?? 0}`
             );
           }
         }
         if (shortfall.length > 0) {
           return NextResponse.json(
-            {
-              success: false,
-              message: `Insufficient stock to reserve components:\n${shortfall.join("\n")}`,
-            },
+            { success: false, message: `Insufficient stock to reserve:\n${shortfall.join("\n")}` },
             { status: 400 }
           );
         }
@@ -146,7 +197,7 @@ export async function PATCH(
         }
       }
 
-      // ── STARTED → CLOSED: release all previously reserved components ─────────
+      // ── STARTED → CLOSED: release reserved components ──────────────────────
       if (targetStatus === MOStatus.CLOSED && currentStatus === MOStatus.STARTED) {
         if (bom && bom.components.length > 0) {
           for (const comp of bom.components) {
@@ -162,106 +213,104 @@ export async function PATCH(
         }
       }
 
-      // ── STARTED → COMPLETED: release reservations, consume stock, produce FG ──
+      // ── STARTED → COMPLETED: release reservations + OUT components + IN FG ──
       if (targetStatus === MOStatus.COMPLETED) {
-        // A. Validate BoM exists
-        const hasBom = await validateBoMExists(mo.productId);
-        if (!hasBom) {
+        // Use MO-level components (set when BoM was applied to this MO)
+        const moComponents = await db.mOComponent.findMany({
+          where: { moId: id },
+          include: { product: true },
+        });
+
+        if (moComponents.length === 0) {
           return NextResponse.json(
             {
               success: false,
-              message: "Cannot complete manufacturing order: A valid Bill of Materials with at least one component must exist for this product.",
+              message:
+                "Cannot complete: the order must have at least one component in its specification.",
             },
             { status: 400 }
           );
         }
 
-        if (!bom) {
-          return NextResponse.json({ success: false, message: "Failed to retrieve BoM." }, { status: 400 });
+        // Pre-flight stock check
+        const insufficient: string[] = [];
+        for (const comp of moComponents) {
+          if (!comp.product || comp.product.stockQty < comp.quantity) {
+            insufficient.push(
+              `"${comp.product?.name ?? "Unknown"}" (${comp.product?.sku ?? "?"}) — need ${comp.quantity}, have ${comp.product?.stockQty ?? 0}`
+            );
+          }
+        }
+        if (insufficient.length > 0) {
+          return NextResponse.json(
+            { success: false, message: `Insufficient stock for components:\n${insufficient.join("\n")}` },
+            { status: 400 }
+          );
         }
 
-        // B. Pre-flight check: Verify sufficient actual stock for all components
-        const insufficientComponents: string[] = [];
-        for (const comp of bom.components) {
-          const compProduct = await db.product.findFirst({
-            where: { id: comp.productId, companyId },
-          });
-
-          const requiredQty = comp.quantity * mo.quantity;
-          if (!compProduct || compProduct.stockQty < requiredQty) {
-            const currentStock = compProduct ? compProduct.stockQty : 0;
-            const sku = compProduct ? compProduct.sku : "UNKNOWN";
-            const name = compProduct ? compProduct.name : "Unknown Component";
-            insufficientComponents.push(
-              `"${name}" (${sku}) - Required: ${requiredQty}, Available: ${currentStock}`
+        // Release reservations (placed at STARTED) then consume + produce inside a transaction
+        if (bom && bom.components.length > 0) {
+          for (const comp of bom.components) {
+            await recordStockMovement(
+              comp.productId,
+              comp.quantity * mo.quantity,
+              MovementType.RELEASE,
+              "MANUFACTURING_ORDER",
+              mo.id,
+              companyId
             );
           }
         }
 
-        if (insufficientComponents.length > 0) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: `Insufficient stock for components:\n${insufficientComponents.join("\n")}`,
-            },
-            { status: 400 }
-          );
-        }
+        const updatedMO = await db.$transaction(async (tx) => {
+          // OUT each component
+          for (const comp of moComponents) {
+            await recordStockMovement(
+              comp.productId,
+              comp.quantity,
+              MovementType.OUT,
+              "MANUFACTURING_ORDER",
+              mo.id,
+              companyId,
+              tx
+            );
+          }
 
-        // C. Release reservations first (RELEASE), then consume (OUT), then produce (IN)
-        for (const comp of bom.components) {
-          // Release the reservation placed when MO was started
+          // IN finished goods
           await recordStockMovement(
-            comp.productId,
-            comp.quantity * mo.quantity,
-            MovementType.RELEASE,
+            mo.productId,
+            mo.quantity,
+            MovementType.IN,
             "MANUFACTURING_ORDER",
             mo.id,
-            companyId
+            companyId,
+            tx
           );
-        }
 
-        // Consume components (OUT)
-        for (const comp of bom.components) {
-          await recordStockMovement(
-            comp.productId,
-            comp.quantity * mo.quantity,
-            MovementType.OUT,
-            "MANUFACTURING_ORDER",
-            mo.id,
-            companyId
-          );
-        }
+          return await tx.manufacturingOrder.update({
+            where: { id },
+            data: { status: targetStatus },
+          });
+        });
 
-        // Add finished goods (IN)
-        await recordStockMovement(
-          mo.productId,
-          mo.quantity,
-          MovementType.IN,
-          "MANUFACTURING_ORDER",
-          mo.id,
-          companyId
-        );
+        await logAudit(companyId, session.user.id, "ManufacturingOrder", id, `STATUS_${targetStatus}`, {
+          before: { status: currentStatus },
+          after:  { status: targetStatus },
+        });
+
+        return NextResponse.json({ success: true, data: updatedMO });
       }
 
-      // D. Update MO status
+      // ── All other transitions (STARTED, CLOSED from DRAFT/COMPLETED) ────────
       const updatedMO = await db.manufacturingOrder.update({
         where: { id },
         data: { status: targetStatus },
       });
 
-      // E. Write status change audit log
-      await logAudit(
-        companyId,
-        session.user.id,
-        "ManufacturingOrder",
-        id,
-        `STATUS_${targetStatus}`,
-        {
-          before: { status: currentStatus },
-          after: { status: targetStatus },
-        }
-      );
+      await logAudit(companyId, session.user.id, "ManufacturingOrder", id, `STATUS_${targetStatus}`, {
+        before: { status: currentStatus },
+        after:  { status: targetStatus },
+      });
 
       return NextResponse.json({ success: true, data: updatedMO });
     }
@@ -269,10 +318,45 @@ export async function PATCH(
     return NextResponse.json({ success: false, message: "No actions specified." }, { status: 400 });
   } catch (error) {
     console.error("Failed to update MO:", error);
-    const errorMessage = error instanceof Error ? error.message : "Internal server error.";
-    return NextResponse.json(
-      { success: false, message: errorMessage },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error.";
+    return NextResponse.json({ success: false, message }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
+    }
+
+    if (!can(session.user.role, "write", "ManufacturingOrder")) {
+      return NextResponse.json({ success: false, message: "Forbidden." }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const companyId = session.user.companyId;
+
+    const mo = await db.manufacturingOrder.findFirst({
+      where: { id, companyId },
+      include: { components: true, workOrders: true },
+    });
+
+    if (!mo) {
+      return NextResponse.json({ success: false, message: "Manufacturing order not found." }, { status: 404 });
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.manufacturingOrder.delete({ where: { id } });
+      await logAudit(companyId, session.user.id, "ManufacturingOrder", id, "DELETE", { before: mo });
+    });
+
+    return NextResponse.json({ success: true, message: "Manufacturing Order deleted successfully." });
+  } catch (error) {
+    console.error("Failed to delete MO:", error);
+    return NextResponse.json({ success: false, message: "Internal server error." }, { status: 500 });
   }
 }

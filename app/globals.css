@@ -50,3 +50,38 @@ body {
 .drawer-closed {
   transform: translateX(100%);
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .bg-\[\#0E111A\] {
+    background-color: transparent !important;
+    border-color: #e2e8f0 !important;
+  }
+  .border-\[\#1E293B\] {
+    border-color: #cbd5e1 !important;
+  }
+  .text-slate-100, .text-slate-200, .text-slate-300, .text-slate-400 {
+    color: #0f172a !important;
+  }
+  table th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border-bottom: 2px solid #cbd5e1 !important;
+  }
+  table td {
+    border-bottom: 1px solid #e2e8f0 !important;
+    color: #334155 !important;
+  }
+}

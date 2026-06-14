@@ -39,6 +39,7 @@ export async function POST(
                 procurementType: true,
                 stockQty: true,
                 reservedQty: true,
+                costPrice: true,
               },
             },
           },
@@ -57,24 +58,99 @@ export async function POST(
       );
     }
 
+    const company = await db.company.findUnique({
+      where: { id: companyId },
+      select: { autoCreateMO: true },
+    });
+    const autoCreateMO = company?.autoCreateMO ?? true;
+
     const linkedMoIds: string[] = [];
+    const linkedPoIds: string[] = [];
 
     for (const line of so.items) {
       const product = line.product;
       const availableQty = product.stockQty - product.reservedQty;
 
-      if (product.procurementType === "BUY" && availableQty >= line.quantity) {
-        // Sufficient stock — reserve it
-        await recordStockMovement(
-          product.id,
-          line.quantity,
-          MovementType.RESERVE,
-          "SALES_ORDER",
-          so.id,
-          companyId
-        );
+      if (product.procurementType === "BUY") {
+        if (availableQty >= line.quantity) {
+          // Sufficient stock — reserve it
+          await recordStockMovement(
+            product.id,
+            line.quantity,
+            MovementType.RESERVE,
+            "SALES_ORDER",
+            so.id,
+            companyId
+          );
+        } else {
+          // BUY product with insufficient stock -> trigger PO
+          const orderQty = line.quantity - availableQty;
+          const poNumber = `PO-MTO-${line.id}`;
+          
+          // Verify if PO already exists
+          const existingPO = await db.purchaseOrder.findFirst({
+            where: { poNumber, companyId },
+          });
+
+          if (!existingPO) {
+            // Find most recent vendor for this product
+            const lastPOItem = await db.purchaseOrderItem.findFirst({
+              where: { productId: product.id, purchaseOrder: { companyId } },
+              orderBy: { createdAt: "desc" },
+              include: { purchaseOrder: { select: { vendorId: true } } },
+            });
+
+            let vendorId = lastPOItem?.purchaseOrder.vendorId;
+
+            if (!vendorId) {
+              // Try to find any vendor in the company
+              const anyVendor = await db.vendor.findFirst({
+                where: { companyId },
+              });
+              if (anyVendor) {
+                vendorId = anyVendor.id;
+              } else {
+                // Create a default vendor if none exists
+                const defaultVendor = await db.vendor.create({
+                  data: {
+                    name: "Default Vendor",
+                    email: "vendor@example.com",
+                    phone: "1234567890",
+                    companyId,
+                  },
+                });
+                vendorId = defaultVendor.id;
+              }
+            }
+
+            const po = await db.purchaseOrder.create({
+              data: {
+                poNumber,
+                vendorId,
+                status: "DRAFT",
+                totalAmount: orderQty * product.costPrice,
+                companyId,
+                items: {
+                  create: {
+                    productId: product.id,
+                    quantity: orderQty,
+                    unitPrice: product.costPrice,
+                    receivedQty: 0,
+                  },
+                },
+              },
+            });
+            linkedPoIds.push(po.id);
+
+            await logAudit(companyId, session.user.id, "PurchaseOrder", po.id, "CREATE", {
+              after: po,
+            });
+          } else {
+            linkedPoIds.push(existingPO.id);
+          }
+        }
       } else {
-        // MAKE product OR BUY with insufficient stock → trigger MO
+        // MAKE product -> trigger MO
         const moId = await createManufacturingOrderFromSO(line.id);
         linkedMoIds.push(moId);
       }
@@ -94,7 +170,7 @@ export async function POST(
 
     await logAudit(companyId, session.user.id, "SalesOrder", so.id, "STATUS_CHANGE", {
       before: { status: "DRAFT" },
-      after: { status: "CONFIRMED", linkedMoIds },
+      after: { status: "CONFIRMED", linkedMoIds, linkedPoIds },
     });
 
     // Resolve linked MOs for response
@@ -105,7 +181,15 @@ export async function POST(
         })
       : [];
 
-    return NextResponse.json({ success: true, data: { ...confirmed, linkedMOs: linkedMos } });
+    // Resolve linked POs for response
+    const linkedPos = linkedPoIds.length > 0
+      ? await db.purchaseOrder.findMany({
+          where: { id: { in: linkedPoIds } },
+          select: { id: true, poNumber: true, status: true, totalAmount: true },
+        })
+      : [];
+
+    return NextResponse.json({ success: true, data: { ...confirmed, linkedMOs: linkedMos, linkedPOs: linkedPos } });
   } catch (error) {
     console.error("Failed to confirm Sales Order:", error);
     return NextResponse.json({ success: false, message: "Internal server error." }, { status: 500 });

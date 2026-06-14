@@ -51,7 +51,18 @@ export async function GET(
         })
       : [];
 
-    return NextResponse.json({ success: true, data: { ...so, linkedMOs: linkedMos } });
+    // Resolve linked Purchase Orders via PO-MTO line encoding
+    const linkedPos = itemIds.length > 0
+      ? await db.purchaseOrder.findMany({
+          where: {
+            companyId,
+            poNumber: { in: itemIds.map((id: string) => `PO-MTO-${id}`) },
+          },
+          select: { id: true, poNumber: true, status: true, totalAmount: true },
+        })
+      : [];
+
+    return NextResponse.json({ success: true, data: { ...so, linkedMOs: linkedMos, linkedPOs: linkedPos } });
   } catch (error) {
     console.error("Failed to fetch Sales Order:", error);
     return NextResponse.json({ success: false, message: "Internal server error." }, { status: 500 });

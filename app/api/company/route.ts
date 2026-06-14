@@ -13,6 +13,12 @@ const updateSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #6366f1)")
     .optional(),
+  currency: z.enum(["USD", "EUR", "GBP", "INR", "JPY"]).optional(),
+  allowNegativeStock: z.boolean().optional(),
+  autoCreateMO: z.boolean().optional(),
+  email: z.string().email("Must be a valid email").or(z.literal("")).optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
 });
 
 export async function GET() {
@@ -26,7 +32,18 @@ export async function GET() {
 
     const company = await db.company.findUnique({
       where: { id: companyId },
-      select: { id: true, name: true, logoUrl: true, accentColor: true },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        accentColor: true,
+        currency: true,
+        allowNegativeStock: true,
+        autoCreateMO: true,
+        email: true,
+        phone: true,
+        address: true,
+      },
     });
 
     if (!company) {
@@ -48,7 +65,7 @@ export async function PUT(req: Request) {
     }
 
     // Admin-only
-    if (session.user.role !== Role.ADMIN) {
+    if (session.user.role !== Role.ADMIN && session.user.role !== Role.SUPER_ADMIN) {
       return NextResponse.json(
         { success: false, message: "Forbidden: Admin access only." },
         { status: 403 }
@@ -66,9 +83,29 @@ export async function PUT(req: Request) {
       );
     }
 
-    const { name, logoUrl, accentColor } = parsed.data;
+    const {
+      name,
+      logoUrl,
+      accentColor,
+      currency,
+      allowNegativeStock,
+      autoCreateMO,
+      email,
+      phone,
+      address,
+    } = parsed.data;
 
-    if (!name && logoUrl === undefined && !accentColor) {
+    if (
+      name === undefined &&
+      logoUrl === undefined &&
+      accentColor === undefined &&
+      currency === undefined &&
+      allowNegativeStock === undefined &&
+      autoCreateMO === undefined &&
+      email === undefined &&
+      phone === undefined &&
+      address === undefined
+    ) {
       return NextResponse.json(
         { success: false, message: "No fields provided to update." },
         { status: 400 }
@@ -77,7 +114,17 @@ export async function PUT(req: Request) {
 
     const before = await db.company.findUnique({
       where: { id: companyId },
-      select: { name: true, logoUrl: true, accentColor: true },
+      select: {
+        name: true,
+        logoUrl: true,
+        accentColor: true,
+        currency: true,
+        allowNegativeStock: true,
+        autoCreateMO: true,
+        email: true,
+        phone: true,
+        address: true,
+      },
     });
 
     const after = await db.company.update({
@@ -86,8 +133,25 @@ export async function PUT(req: Request) {
         ...(name !== undefined && { name }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(accentColor !== undefined && { accentColor }),
+        ...(currency !== undefined && { currency }),
+        ...(allowNegativeStock !== undefined && { allowNegativeStock }),
+        ...(autoCreateMO !== undefined && { autoCreateMO }),
+        ...(email !== undefined && { email: email || null }),
+        ...(phone !== undefined && { phone: phone || null }),
+        ...(address !== undefined && { address: address || null }),
       },
-      select: { id: true, name: true, logoUrl: true, accentColor: true },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        accentColor: true,
+        currency: true,
+        allowNegativeStock: true,
+        autoCreateMO: true,
+        email: true,
+        phone: true,
+        address: true,
+      },
     });
 
     await logAudit(companyId, session.user.id, "Company", companyId, "UPDATE", {

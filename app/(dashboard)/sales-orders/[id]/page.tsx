@@ -16,7 +16,10 @@ import {
   MapPin,
   Calendar,
   Hash,
+  XCircle,
+  ShoppingBag,
 } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 type SOStatus = "DRAFT" | "CONFIRMED" | "DELIVERED" | "CANCELLED";
 
@@ -38,6 +41,13 @@ interface LinkedMO {
   status: string;
 }
 
+interface LinkedPO {
+  id: string;
+  poNumber: string;
+  status: string;
+  totalAmount: number;
+}
+
 interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -49,6 +59,7 @@ interface SalesOrder {
   updatedAt: string;
   items: OrderLine[];
   linkedMOs?: LinkedMO[];
+  linkedPOs?: LinkedPO[];
 }
 
 function StatusBadge({ status }: { status: SOStatus }) {
@@ -91,11 +102,12 @@ function SectionHeader({ icon: Icon, label, accent }: { icon: React.ElementType;
 }
 
 export default function SalesOrderDetailPage() {
+  const { currencySymbol } = useBranding();
   const params = useParams<{ id: string }>();
 
   const [so, setSo] = useState<SalesOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<"confirm" | "deliver" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"confirm" | "deliver" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -161,6 +173,27 @@ export default function SalesOrderDetailPage() {
     }
   };
 
+  const handleCancel = async () => {
+    if (!confirm("Are you sure you want to cancel this Sales Order? This cannot be undone.")) return;
+    setActionLoading("cancel");
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/sales-orders/${params.id}/cancel`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess("Sales Order has been cancelled. Reserved stock released.");
+        await fetchSO();
+      } else {
+        setError(data.message || "Failed to cancel order.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-500 text-sm font-mono animate-pulse">
@@ -182,6 +215,7 @@ export default function SalesOrderDetailPage() {
   }
 
   const linkedMOs = so.linkedMOs ?? [];
+  const linkedPOs = so.linkedPOs ?? [];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -231,6 +265,21 @@ export default function SalesOrderDetailPage() {
                   <Truck className="w-3.5 h-3.5" />
                 )}
                 {actionLoading === "deliver" ? "Processing…" : "Mark Delivered"}
+              </button>
+            )}
+            {(so.status === "DRAFT" || so.status === "CONFIRMED") && (
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading !== null}
+                id="btn-cancel-so"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/40 hover:border-rose-500/70 disabled:opacity-50 text-rose-400 font-bold text-xs font-mono rounded-lg transition-all active:scale-95"
+              >
+                {actionLoading === "cancel" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5" />
+                )}
+                {actionLoading === "cancel" ? "Cancelling…" : "Cancel Order"}
               </button>
             )}
           </div>
@@ -319,10 +368,10 @@ export default function SalesOrderDetailPage() {
                     {item.quantity}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono text-slate-400">
-                    ₹{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {currencySymbol}{item.unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-200">
-                    ₹{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {currencySymbol}{(item.quantity * item.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               ))}
@@ -333,7 +382,7 @@ export default function SalesOrderDetailPage() {
                   Order Total
                 </td>
                 <td className="px-5 py-4 text-right font-mono font-extrabold text-indigo-400 text-base">
-                  ₹{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  {currencySymbol}{so.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             </tfoot>
@@ -364,6 +413,43 @@ export default function SalesOrderDetailPage() {
                 <Link
                   href={`/manufacturing-orders`}
                   id={`mo-link-${mo.id}`}
+                  className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold font-mono transition-colors"
+                >
+                  View →
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Linked Purchase Orders */}
+      {linkedPOs.length > 0 && (
+        <div className="bg-[#0E111A] border border-[#1E293B]/60 rounded-xl p-6 space-y-4">
+          <SectionHeader icon={ShoppingBag} label="Linked Purchase Orders" accent="bg-cyan-500" />
+          <div className="space-y-2">
+            {linkedPOs.map((po) => (
+              <div
+                key={po.id}
+                className="flex items-center justify-between p-3 bg-[#07080C] border border-[#1E293B]/60 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="w-4 h-4 text-cyan-500/60" />
+                  <div>
+                    <span className="text-xs font-semibold text-slate-300">Purchase Order: </span>
+                    <span className="font-mono text-xs text-cyan-400 font-bold">{po.poNumber}</span>
+                  </div>
+                  <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border bg-slate-500/10 text-slate-400 border-slate-500/25">
+                    {po.status}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    ₹{po.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <Link
+                  href={`/purchase-orders`}
+                  id={`po-link-${po.id}`}
                   className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold font-mono transition-colors"
                 >
                   View →

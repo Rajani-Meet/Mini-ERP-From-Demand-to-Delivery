@@ -59,6 +59,12 @@ model Company {
   name                 String
   logoUrl              String?
   accentColor          String?                @default("#6366f1") // indigo default
+  currency             String                 @default("USD")
+  allowNegativeStock   Boolean                @default(false)
+  autoCreateMO         Boolean                @default(true)
+  email                String?
+  phone                String?
+  address              String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   users                User[]
@@ -116,6 +122,7 @@ model Product {
   inventoryMovements  InventoryMovement[]
   bom                 BillOfMaterials?       @relation("ProductBoM")
   bomComponents       BoMComponent[]
+  moComponents        MOComponent[]
 
   @@unique([sku, companyId])
 }
@@ -189,39 +196,80 @@ model PurchaseOrderItem {
 // - bomId is resolved implicitly via the Product's BoM association.
 // - salesOrderItemId (for MTO) is encoded into the moNumber field as `MTO-${salesOrderItemId}`.
 model ManufacturingOrder {
-  id        String   @id @default(uuid())
-  moNumber  String   @unique // Encodes salesOrderItemId for MTO orders (e.g. MTO-{uuid})
+  id           String             @id @default(uuid())
+  moNumber     String             @unique // Encodes salesOrderItemId for MTO orders (e.g. MTO-{uuid})
+  productId    String
+  product      Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Int
+  status       MOStatus           @default(DRAFT)
+  bomId        String?
+  bom          BillOfMaterials?   @relation(fields: [bomId], references: [id], onDelete: SetNull)
+  bomReference String?            // Holds the BOM Reference (e.g. BOM-000001)
+  components   MOComponent[]
+  workOrders   MOWorkOrder[]
+  companyId    String
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model MOComponent {
+  id        String             @id @default(uuid())
+  moId      String
+  mo        ManufacturingOrder @relation(fields: [moId], references: [id], onDelete: Cascade)
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity  Int
-  status    MOStatus @default(DRAFT)
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model MOWorkOrder {
+  id               String             @id @default(uuid())
+  moId             String
+  mo               ManufacturingOrder @relation(fields: [moId], references: [id], onDelete: Cascade)
+  operation        String
+  workCenter       String
+  expectedDuration Int // in minutes
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 }
 
 model BillOfMaterials {
-  id          String         @id @default(uuid())
-  productId   String         @unique
-  product     Product        @relation("ProductBoM", fields: [productId], references: [id], onDelete: Cascade)
-  quantity    Int            @default(1) // Output quantity for this BoM
-  companyId   String
-  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  components  BoMComponent[]
+  id                  String               @id @default(uuid())
+  productId           String               @unique
+  product             Product              @relation("ProductBoM", fields: [productId], references: [id], onDelete: Cascade)
+  quantity            Int                  @default(1) // Output quantity for this BoM
+  reference           String?              // Limit to 9 characters in UI validation
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  components          BoMComponent[]
+  workOrders          BoMWorkOrder[]
+  manufacturingOrders ManufacturingOrder[]
 }
 
 model BoMComponent {
-  id          String          @id @default(uuid())
-  bomId       String
-  bom         BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
-  productId   String
-  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity    Int
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id        String          @id @default(uuid())
+  bomId     String
+  bom       BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model BoMWorkOrder {
+  id               String          @id @default(uuid())
+  bomId            String
+  bom              BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  operation        String
+  workCenter       String
+  expectedDuration Int // in minutes
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
 
 model InventoryMovement {
@@ -249,5 +297,13 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   companyId String
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
   createdAt DateTime @default(now())
 }

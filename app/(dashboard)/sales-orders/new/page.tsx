@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, Plus, Trash2, AlertCircle, ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface Product {
   id: string;
@@ -18,14 +19,17 @@ interface OrderLine {
   productId: string;
   qty: number;
   unitPrice: number;
+  unitPriceRaw: string; // tracks the raw input string to avoid controlled→uncontrolled flicker
+  qtyRaw: string;
 }
 
 export default function NewSalesOrderPage() {
+  const { currencySymbol } = useBranding();
   const router = useRouter();
 
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
-  const [lines, setLines] = useState<OrderLine[]>([{ id: crypto.randomUUID(), productId: "", qty: 1, unitPrice: 0 }]);
+  const [lines, setLines] = useState<OrderLine[]>([{ id: crypto.randomUUID(), productId: "", qty: 1, unitPrice: 0, qtyRaw: "1", unitPriceRaw: "0" }]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingProducts, setIsFetchingProducts] = useState(true);
@@ -49,7 +53,7 @@ export default function NewSalesOrderPage() {
   const total = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 
   const addLine = () => {
-    setLines((prev) => [...prev, { id: crypto.randomUUID(), productId: "", qty: 1, unitPrice: 0 }]);
+    setLines((prev) => [...prev, { id: crypto.randomUUID(), productId: "", qty: 1, unitPrice: 0, qtyRaw: "1", unitPriceRaw: "0" }]);
   };
 
   const removeLine = (id: string) => {
@@ -64,10 +68,29 @@ export default function NewSalesOrderPage() {
         // Auto-fill unit price from product's salesPrice when product changes
         if (field === "productId") {
           const product = products.find((p) => p.id === value);
-          if (product) updated.unitPrice = product.stockPrice;
+          if (product) {
+            updated.unitPrice = product.stockPrice;
+            updated.unitPriceRaw = String(product.stockPrice);
+          }
         }
         return updated;
       })
+    );
+  };
+
+  const updateQtyRaw = (id: string, raw: string) => {
+    const parsed = parseInt(raw);
+    const qty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, qtyRaw: raw, qty }))
+    );
+  };
+
+  const updateUnitPriceRaw = (id: string, raw: string) => {
+    const parsed = parseFloat(raw);
+    const unitPrice = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, unitPriceRaw: raw, unitPrice }))
     );
   };
 
@@ -224,8 +247,8 @@ export default function NewSalesOrderPage() {
                 <tr className="border-b border-[#1E293B] text-slate-500 font-mono uppercase text-[10px]">
                   <th className="pb-2 text-left pr-3">Product</th>
                   <th className="pb-2 text-right w-24 px-2">Qty</th>
-                  <th className="pb-2 text-right w-32 px-2">Unit Price (₹)</th>
-                  <th className="pb-2 text-right w-32 px-2">Subtotal (₹)</th>
+                  <th className="pb-2 text-right w-32 px-2">Unit Price ({currencySymbol})</th>
+                  <th className="pb-2 text-right w-32 px-2">Subtotal ({currencySymbol})</th>
                   <th className="pb-2 w-10" />
                 </tr>
               </thead>
@@ -302,8 +325,9 @@ export default function NewSalesOrderPage() {
                         <input
                           type="number"
                           min={1}
-                          value={line.qty}
-                          onChange={(e) => updateLine(line.id, "qty", Math.max(1, parseInt(e.target.value) || 1))}
+                          value={line.qtyRaw}
+                          onChange={(e) => updateQtyRaw(line.id, e.target.value)}
+                          onBlur={() => updateQtyRaw(line.id, String(line.qty))}
                           id={`line-qty-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                         />
@@ -314,15 +338,16 @@ export default function NewSalesOrderPage() {
                           type="number"
                           min={0}
                           step="0.01"
-                          value={line.unitPrice}
-                          onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)}
+                          value={line.unitPriceRaw}
+                          onChange={(e) => updateUnitPriceRaw(line.id, e.target.value)}
+                          onBlur={() => updateUnitPriceRaw(line.id, String(line.unitPrice))}
                           id={`line-price-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                         />
                       </td>
                       {/* Subtotal */}
                       <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-300">
-                        ₹{(line.qty * line.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{(line.qty * line.unitPrice).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       {/* Remove */}
                       <td className="py-2.5 pl-2">
@@ -346,7 +371,7 @@ export default function NewSalesOrderPage() {
                     Order Total
                   </td>
                   <td className="pt-4 px-2 text-right font-mono font-extrabold text-indigo-400 text-base">
-                    ₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {currencySymbol}{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td />
                 </tr>

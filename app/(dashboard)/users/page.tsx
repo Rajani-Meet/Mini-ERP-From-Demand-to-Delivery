@@ -86,13 +86,13 @@ export default function UserManagementPage() {
   };
 
   useEffect(() => {
-    if (userRole === Role.ADMIN) {
+    if (userRole === Role.ADMIN || userRole === "SUPER_ADMIN" as Role) {
       fetchUsers();
     }
   }, [userRole]);
 
   // Guard: Admin-only access
-  if (userRole !== Role.ADMIN) {
+  if (userRole !== Role.ADMIN && userRole !== "SUPER_ADMIN" as Role) {
     return (
       <div className="flex flex-col items-center justify-center py-24 px-6 text-center space-y-4 max-w-md mx-auto">
         <div className="p-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl">
@@ -191,7 +191,7 @@ export default function UserManagementPage() {
 
     // Self-edit check
     if (editingUser && editingUser.id === currentUserId) {
-      if (status === UserStatus.INACTIVE || role !== Role.ADMIN) {
+      if (status === UserStatus.INACTIVE || (role !== Role.ADMIN && role !== "SUPER_ADMIN" as Role)) {
         setErrorMessage("Safety Constraint: You cannot demote or deactivate your own admin session.");
         return;
       }
@@ -442,7 +442,9 @@ export default function UserManagementPage() {
                     <td className="p-4">
                       <span
                         className={`inline-block text-[9px] font-bold font-mono px-2 py-0.5 rounded border uppercase tracking-wider ${
-                          user.role === Role.ADMIN
+                          user.role === ("SUPER_ADMIN" as Role)
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : user.role === Role.ADMIN
                             ? "bg-red-500/10 text-red-400 border-red-500/20"
                             : user.role === Role.MANAGER
                             ? "bg-blue-500/10 text-blue-400 border-blue-500/20"

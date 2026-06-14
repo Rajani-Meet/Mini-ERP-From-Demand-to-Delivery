@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { MovementType } from "@prisma/client";
 import { getCompanyId } from "./tenant";
+import { triggerReorderIfNeeded } from "./reorder";
 
 /**
  * Records an inventory movement, updates product stock counts, and writes logs.
@@ -12,7 +13,8 @@ export async function recordStockMovement(
   movementType: MovementType,
   referenceType: string,
   referenceId: string,
-  providedCompanyId?: string
+  providedCompanyId?: string,
+  txClient?: any
 ) {
   if (quantity <= 0) {
     throw new Error("Quantity must be greater than zero.");
@@ -24,7 +26,7 @@ export async function recordStockMovement(
     companyId = await getCompanyId();
   }
 
-  return await db.$transaction(async (tx) => {
+  const execute = async (tx: any) => {
     // 1. Fetch product
     const product = await tx.product.findFirst({
       where: { id: productId, companyId },
@@ -55,9 +57,15 @@ export async function recordStockMovement(
         throw new Error(`Unknown movement type: ${movementType}`);
     }
 
-    // Validation: Stock cannot go below zero
+    // Validation: Stock cannot go below zero unless allowed by settings
     if (newStockQty < 0) {
-      throw new Error(`Insufficient stock for product "${product.name}" (${product.sku}). Current stock: ${product.stockQty}, required deduction: ${quantity}.`);
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { allowNegativeStock: true },
+      });
+      if (!company?.allowNegativeStock) {
+        throw new Error(`Insufficient stock for product "${product.name}" (${product.sku}). Current stock: ${product.stockQty}, required deduction: ${quantity}.`);
+      }
     }
 
     if (newReservedQty < 0) {
@@ -98,6 +106,16 @@ export async function recordStockMovement(
       },
     });
 
+    // 6. Auto-create a DRAFT PO if stock fell below reorder point
+    if (movementType === MovementType.OUT) {
+      await triggerReorderIfNeeded(tx, productId, companyId, newStockQty);
+    }
+
     return movement;
-  });
+  };
+
+  if (txClient) {
+    return await execute(txClient);
+  }
+  return await db.$transaction(execute);
 }

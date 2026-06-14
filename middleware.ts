@@ -18,6 +18,6 @@ export const config = {
      * - _next/image (Image optimization)
      * - favicon.ico (Icon files)
      */
-    "/((?!api/auth|api/signup|login|signup|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/signup|login|signup|forgot-password|reset-password|_next/static|_next/image|favicon.ico).*)",
   ],
 };

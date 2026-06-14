@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { can } from "@/lib/permissions";
 import { Role } from "@prisma/client";
+import { useRouter } from "next/navigation";
 import {
   FileSpreadsheet,
   Plus,
@@ -14,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  History,
 } from "lucide-react";
 
 interface ProductSelectorItem {
@@ -32,21 +34,30 @@ interface ComponentItem {
   };
 }
 
+interface WorkOrderTemplate {
+  operation: string;
+  workCenter: string;
+  expectedDuration: number;
+}
+
 interface BomItem {
   id: string;
   productId: string;
   quantity: number;
+  reference: string | null;
   product: {
     name: string;
     sku: string;
   };
   components: ComponentItem[];
+  workOrders: WorkOrderTemplate[];
   createdAt: string;
 }
 
 export default function BillOfMaterialsPage() {
   const { data: session } = useSession();
   const userRole = (session?.user?.role as Role) || "VIEWER";
+  const router = useRouter();
 
   // Check UI permissions
   const canWrite = can(userRole, "write", "BillOfMaterials");
@@ -61,7 +72,7 @@ export default function BillOfMaterialsPage() {
 
   // Search/Sort/Filter State
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortField, setSortField] = useState<"product" | "components" | "date">("date");
+  const [sortField, setSortField] = useState<"product" | "components" | "date" | "reference">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -71,9 +82,12 @@ export default function BillOfMaterialsPage() {
   const [editingBomId, setEditingBomId] = useState<string | null>(null);
   const [parentProductId, setParentProductId] = useState("");
   const [bomQuantity, setBomQuantity] = useState(1);
+  const [reference, setReference] = useState("");
+  const [drawerTab, setDrawerTab] = useState<"components" | "workOrders">("components");
   const [components, setComponents] = useState<{ productId: string; quantity: number }[]>([
     { productId: "", quantity: 1 },
   ]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderTemplate[]>([]);
 
   // Initial Data Fetching
   const fetchData = async () => {
@@ -106,7 +120,10 @@ export default function BillOfMaterialsPage() {
     setEditingBomId(null);
     setParentProductId("");
     setBomQuantity(1);
+    setReference("");
+    setDrawerTab("components");
     setComponents([{ productId: "", quantity: 1 }]);
+    setWorkOrders([]);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsDrawerOpen(true);
@@ -116,12 +133,15 @@ export default function BillOfMaterialsPage() {
     setEditingBomId(bom.id);
     setParentProductId(bom.productId);
     setBomQuantity(bom.quantity);
+    setReference(bom.reference || "");
+    setDrawerTab("components");
     setComponents(
       bom.components.map((comp) => ({
         productId: comp.productId,
         quantity: comp.quantity,
       }))
     );
+    setWorkOrders(bom.workOrders || []);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsDrawerOpen(true);
@@ -147,6 +167,27 @@ export default function BillOfMaterialsPage() {
     setComponents(updated);
   };
 
+  // Work Orders Form Handlers
+  const handleAddWorkOrderRow = () => {
+    setWorkOrders([...workOrders, { operation: "", workCenter: "", expectedDuration: 10 }]);
+  };
+
+  const handleRemoveWorkOrderRow = (index: number) => {
+    const updated = [...workOrders];
+    updated.splice(index, 1);
+    setWorkOrders(updated);
+  };
+
+  const handleWorkOrderChange = (index: number, field: keyof WorkOrderTemplate, value: any) => {
+    const updated = [...workOrders];
+    if (field === "expectedDuration") {
+      updated[index].expectedDuration = Math.max(1, value || 0);
+    } else {
+      updated[index][field] = value as string & number;
+    }
+    setWorkOrders(updated);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -155,6 +196,11 @@ export default function BillOfMaterialsPage() {
     // Frontend Validations
     if (!parentProductId) {
       setErrorMessage("Please select a parent product.");
+      return;
+    }
+
+    if (reference && reference.length > 9) {
+      setErrorMessage("Reference must not exceed 9 characters.");
       return;
     }
 
@@ -176,6 +222,13 @@ export default function BillOfMaterialsPage() {
       return;
     }
 
+    // Validate work orders if any
+    const hasInvalidWorkOrder = workOrders.some((wo) => !wo.operation || !wo.workCenter || wo.expectedDuration <= 0);
+    if (hasInvalidWorkOrder) {
+      setErrorMessage("All work orders must specify an operation name, work center, and a duration greater than zero.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const url = editingBomId ? `/api/bom/${editingBomId}` : "/api/bom";
@@ -188,6 +241,8 @@ export default function BillOfMaterialsPage() {
           productId: parentProductId,
           quantity: bomQuantity,
           components,
+          reference: reference || undefined,
+          workOrders,
         }),
       });
 
@@ -237,7 +292,7 @@ export default function BillOfMaterialsPage() {
   };
 
   // Sort & Search Processing
-  const handleSort = (field: "product" | "components" | "date") => {
+  const handleSort = (field: "product" | "components" | "date" | "reference") => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
@@ -250,7 +305,8 @@ export default function BillOfMaterialsPage() {
     const query = searchQuery.toLowerCase();
     return (
       bom.product.name.toLowerCase().includes(query) ||
-      bom.product.sku.toLowerCase().includes(query)
+      bom.product.sku.toLowerCase().includes(query) ||
+      (bom.reference && bom.reference.toLowerCase().includes(query))
     );
   });
 
@@ -258,6 +314,11 @@ export default function BillOfMaterialsPage() {
     const factor = sortDirection === "asc" ? 1 : -1;
     if (sortField === "product") {
       return a.product.name.localeCompare(b.product.name) * factor;
+    }
+    if (sortField === "reference") {
+      const refA = a.reference || "";
+      const refB = b.reference || "";
+      return refA.localeCompare(refB) * factor;
     }
     if (sortField === "components") {
       return (a.components.length - b.components.length) * factor;
@@ -299,7 +360,7 @@ export default function BillOfMaterialsPage() {
         {canWrite && (
           <button
             onClick={openNewDrawer}
-            className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-amber-500/10 text-xs"
+            className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-amber-500/10 text-xs font-mono"
             id="btn-create-bom"
           >
             <Plus className="w-4 h-4" />
@@ -327,7 +388,7 @@ export default function BillOfMaterialsPage() {
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by product name or SKU..."
+            placeholder="Search by product name, SKU or reference..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -341,7 +402,7 @@ export default function BillOfMaterialsPage() {
       {/* Grid / Table */}
       <div className="bg-[#0E111A] border border-[#1E293B]/60 rounded-xl overflow-hidden shadow-2xl">
         {isLoading ? (
-          <div className="text-center py-20 text-slate-500 text-xs">
+          <div className="text-center py-20 text-slate-500 text-xs font-mono">
             Loading recipe specifications...
           </div>
         ) : paginatedBoms.length === 0 ? (
@@ -355,10 +416,24 @@ export default function BillOfMaterialsPage() {
                 <tr className="bg-[#07080C] border-b border-[#1E293B] text-slate-400 font-mono">
                   <th
                     className="p-4 cursor-pointer hover:bg-slate-900 transition-colors"
+                    onClick={() => handleSort("reference")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Reference
+                      {sortField === "reference" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        ))}
+                    </div>
+                  </th>
+                  <th
+                    className="p-4 cursor-pointer hover:bg-slate-900 transition-colors"
                     onClick={() => handleSort("product")}
                   >
                     <div className="flex items-center gap-1.5">
-                      Parent Product
+                      Finished Product
                       {sortField === "product" &&
                         (sortDirection === "asc" ? (
                           <ChevronUp className="w-3.5 h-3.5" />
@@ -382,6 +457,8 @@ export default function BillOfMaterialsPage() {
                         ))}
                     </div>
                   </th>
+                  <th className="p-4 text-right">Quantity</th>
+                  <th className="p-4">Unit</th>
                   <th
                     className="p-4 cursor-pointer hover:bg-slate-900 transition-colors"
                     onClick={() => handleSort("date")}
@@ -402,6 +479,7 @@ export default function BillOfMaterialsPage() {
               <tbody className="divide-y divide-[#1E293B]/40 text-slate-300">
                 {paginatedBoms.map((bom) => (
                   <tr key={bom.id} className="hover:bg-[#07080C]/40 transition-colors">
+                    <td className="p-4 font-mono font-semibold text-amber-500">{bom.reference || "N/A"}</td>
                     <td className="p-4 font-semibold text-slate-100">{bom.product.name}</td>
                     <td className="p-4 font-mono text-slate-400">{bom.product.sku}</td>
                     <td className="p-4">
@@ -410,6 +488,10 @@ export default function BillOfMaterialsPage() {
                       </span>
                       items
                     </td>
+                    <td className="p-4 text-right font-mono font-bold text-slate-200">
+                      {parseFloat(bom.quantity.toString()).toFixed(2)}
+                    </td>
+                    <td className="p-4 text-slate-400 font-mono">Units</td>
                     <td className="p-4 text-slate-500">
                       {new Date(bom.createdAt).toLocaleDateString()}
                     </td>
@@ -478,29 +560,44 @@ export default function BillOfMaterialsPage() {
           onClick={(e) => e.stopPropagation()}
         >
           {/* Drawer Header */}
-          <div className="p-6 border-b border-[#1E293B] flex justify-between items-center">
+          <div className="p-6 border-b border-[#1E293B] flex justify-between items-center bg-[#07080C]/40">
             <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 font-bold block mb-1">
+                {editingBomId ? reference || "Recipe Template" : "New Recipe Template"}
+              </span>
               <h3 className="text-lg font-bold text-slate-100" id="drawer-title">
-                {editingBomId ? "Modify Bill of Materials" : "Define Bill of Materials"}
+                {editingBomId ? "Bill of Materials Details" : "Create Bill of Materials"}
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Specify component recipe ratios.
-              </p>
             </div>
-            <button
-              onClick={() => setIsDrawerOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent hover:border-[#1E293B] rounded-lg transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            
+            <div className="flex items-center gap-3">
+              {/* Logs Redirect Button */}
+              {editingBomId && (
+                <button
+                  onClick={() => router.push(`/audit-logs?entity=BillOfMaterials`)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-[#1E293B] text-slate-300 hover:text-amber-500 rounded-xl transition-all duration-200 text-xs font-mono font-bold"
+                  title="Open audit logs trail"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  Logs
+                </button>
+              )}
+              
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent hover:border-[#1E293B] rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Drawer Content Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Parent Product selection */}
+            {/* Finished product Many2one Selector */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
-                Parent Product (Procurement: MAKE)
+                Finished Product (Many2one Selector)
               </label>
               <select
                 value={parentProductId}
@@ -508,7 +605,7 @@ export default function BillOfMaterialsPage() {
                 disabled={!!editingBomId}
                 className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-3 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:opacity-50"
               >
-                <option value="">-- Select Parent Product --</option>
+                <option value="">-- Choose finished product --</option>
                 {makeProducts.map((prod) => (
                   <option key={prod.id} value={prod.id}>
                     {prod.name} ({prod.sku})
@@ -522,77 +619,199 @@ export default function BillOfMaterialsPage() {
               )}
             </div>
 
-            {/* Parent output quantity */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
-                Output Batch Quantity
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={bomQuantity}
-                onChange={(e) => setBomQuantity(parseInt(e.target.value) || 1)}
-                className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-3 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              {/* Output batch quantity */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Quantity (Units)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={bomQuantity}
+                  onChange={(e) => setBomQuantity(parseInt(e.target.value) || 1)}
+                  className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-3 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Reference number */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Reference (Max 9 chars)
+                </label>
+                <input
+                  type="text"
+                  maxLength={9}
+                  placeholder="e.g. BOM-00001"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-3 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
             </div>
 
-            {/* Components dynamic fields */}
-            <div className="space-y-3 pt-3 border-t border-[#1E293B]/50">
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
-                  Components and Ratios
-                </label>
+            {/* Components & Work Orders Tabs Switching */}
+            <div className="pt-4">
+              <div className="flex border-b border-[#1E293B]/60 p-1 bg-[#07080C]/80 rounded-xl mb-4 max-w-sm">
                 <button
                   type="button"
-                  onClick={handleAddComponentRow}
-                  className="flex items-center gap-1 text-[10px] font-mono text-amber-500 hover:text-amber-400 transition-colors"
+                  onClick={() => setDrawerTab("components")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
+                    drawerTab === "components"
+                      ? "bg-slate-800 text-slate-100 shadow border border-slate-700/50"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Component
+                  Components
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab("workOrders")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
+                    drawerTab === "workOrders"
+                      ? "bg-slate-800 text-slate-100 shadow border border-slate-700/50"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Work Orders
                 </button>
               </div>
 
-              <div className="space-y-3">
-                {components.map((comp, idx) => (
-                  <div key={idx} className="flex gap-2.5 items-end">
-                    <div className="flex-1 space-y-1">
-                      <select
-                        value={comp.productId}
-                        onChange={(e) => handleComponentChange(idx, "productId", e.target.value)}
-                        className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                      >
-                        <option value="">-- Choose Component --</option>
-                        {componentCandidates.map((prod) => (
-                          <option key={prod.id} value={prod.id}>
-                            {prod.name} ({prod.sku})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="w-24 space-y-1">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        value={comp.quantity}
-                        onChange={(e) =>
-                          handleComponentChange(idx, "quantity", parseInt(e.target.value) || 0)
-                        }
-                        className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                      />
-                    </div>
-
+              {/* Tab 1: Components Template Grid */}
+              {drawerTab === "components" && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                      Components List
+                    </label>
                     <button
                       type="button"
-                      onClick={() => handleRemoveComponentRow(idx)}
-                      disabled={components.length === 1}
-                      className="p-2.5 border border-[#1E293B] hover:border-red-500/30 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors disabled:opacity-40"
+                      onClick={handleAddComponentRow}
+                      className="flex items-center gap-1 text-[10px] font-mono text-amber-500 hover:text-amber-400 transition-colors font-bold"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5" /> Add Component
                     </button>
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-3">
+                    {components.map((comp, idx) => (
+                      <div key={idx} className="flex gap-2.5 items-end">
+                        <div className="flex-1 space-y-1">
+                          <select
+                            value={comp.productId}
+                            onChange={(e) => handleComponentChange(idx, "productId", e.target.value)}
+                            className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          >
+                            <option value="">-- Choose Component --</option>
+                            {componentCandidates.map((prod) => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.name} ({prod.sku})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="w-24 space-y-1">
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={comp.quantity}
+                            onChange={(e) =>
+                              handleComponentChange(idx, "quantity", parseInt(e.target.value) || 0)
+                            }
+                            className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveComponentRow(idx)}
+                          disabled={components.length === 1}
+                          className="p-2.5 border border-[#1E293B] hover:border-red-500/30 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Work Orders (Operations) Template Grid */}
+              {drawerTab === "workOrders" && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                      Work Orders Grid
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddWorkOrderRow}
+                      className="flex items-center gap-1 text-[10px] font-mono text-amber-500 hover:text-amber-400 transition-colors font-bold"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add a line
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {workOrders.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 italic py-4 text-center bg-[#07080C]/20 border border-[#1E293B]/40 rounded-lg">
+                        No operations configured yet. Click &quot;Add a line&quot; to define template steps.
+                      </p>
+                    ) : (
+                      workOrders.map((wo, idx) => (
+                        <div key={idx} className="flex gap-2 items-end bg-[#07080C]/20 p-3 rounded-lg border border-[#1E293B]/40">
+                          <div className="flex-1 grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-mono uppercase text-slate-500 mb-1">Operations</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Painting"
+                                value={wo.operation}
+                                onChange={(e) => handleWorkOrderChange(idx, "operation", e.target.value)}
+                                className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2 rounded-lg focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-mono uppercase text-slate-500 mb-1">Work Center</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Painting Line"
+                                value={wo.workCenter}
+                                onChange={(e) => handleWorkOrderChange(idx, "workCenter", e.target.value)}
+                                className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2 rounded-lg focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-mono uppercase text-slate-500 mb-1">Expected Duration</label>
+                              <input
+                                type="number"
+                                required
+                                min="1"
+                                placeholder="Mins"
+                                value={wo.expectedDuration}
+                                onChange={(e) => handleWorkOrderChange(idx, "expectedDuration", parseInt(e.target.value) || 0)}
+                                className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs p-2 rounded-lg focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveWorkOrderRow(idx)}
+                            className="p-2 border border-[#1E293B] hover:border-red-500/30 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </form>
 

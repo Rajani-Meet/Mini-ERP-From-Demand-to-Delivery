@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { Role } from "@prisma/client";
+import { sendWelcomeEmail, sendNewUserAdminAlert } from "@/lib/mailer";
 
 // Validate user invite input
 const inviteSchema = z.object({
@@ -40,9 +41,16 @@ export async function GET() {
     }
 
     const companyId = session.user.companyId;
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN" as Role;
+
+    const where: any = {};
+    if (!isSuperAdmin) {
+      where.companyId = companyId;
+      where.role = { not: "SUPER_ADMIN" as Role };
+    }
 
     const users = await db.user.findMany({
-      where: { companyId },
+      where,
       select: {
         id: true,
         name: true,
@@ -80,8 +88,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Forbidden: Admin access only." }, { status: 403 });
     }
 
-    const companyId = session.user.companyId;
     const body = await req.json();
+    let companyId = body.companyId || session.user.companyId;
 
     const parsed = inviteSchema.safeParse(body);
     if (!parsed.success) {
@@ -104,6 +112,13 @@ export async function POST(req: Request) {
       canAccessStockLedger,
       canAccessAuditLogs,
     } = parsed.data;
+
+    if (session.user.role !== "SUPER_ADMIN" as Role) {
+      companyId = session.user.companyId; // Enforce company bounds
+      if (role === "SUPER_ADMIN" as Role) {
+        return NextResponse.json({ success: false, message: "Forbidden: You cannot invite a Super Admin." }, { status: 403 });
+      }
+    }
 
     // Check if user already exists
     const existingUser = await db.user.findUnique({
@@ -165,6 +180,39 @@ export async function POST(req: Request) {
         newValue: JSON.stringify({ email: newUser.email, name: newUser.name, role: newUser.role }),
       },
     });
+
+    // Fetch company name and admin list for email notifications (non-blocking)
+    Promise.all([
+      db.company.findUnique({ where: { id: companyId }, select: { name: true } }),
+      db.user.findMany({
+        where: {
+          companyId,
+          role: { in: [Role.ADMIN, "SUPER_ADMIN" as Role] },
+          status: "ACTIVE",
+          NOT: { id: newUser.id },
+        },
+        select: { email: true, name: true },
+      }),
+    ])
+      .then(([company, admins]) => {
+        const companyName = company?.name ?? "your company";
+        // Welcome email → new user
+        sendWelcomeEmail(newUser.email, newUser.name, companyName, newUser.role).catch((e) =>
+          console.error("[mailer] welcome email failed:", e)
+        );
+        // Admin alert emails
+        admins.forEach((admin) => {
+          sendNewUserAdminAlert(
+            admin.email,
+            admin.name,
+            newUser.name,
+            newUser.email,
+            newUser.role,
+            companyName
+          ).catch((e) => console.error("[mailer] admin alert failed:", e));
+        });
+      })
+      .catch((e) => console.error("[mailer] email notification setup failed:", e));
 
     return NextResponse.json({ success: true, data: newUser });
   } catch (error) {

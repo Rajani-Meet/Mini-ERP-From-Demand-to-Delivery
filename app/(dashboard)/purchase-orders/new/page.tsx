@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { TrendingDown, Plus, Trash2, AlertCircle, ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface Product {
   id: string;
@@ -23,15 +24,19 @@ interface OrderLine {
   productId: string;
   orderedQty: number;
   unitCost: number;
+  orderedQtyRaw: string;
+  unitCostRaw: string;
 }
 
 export default function NewPurchaseOrderPage() {
+  const { currencySymbol } = useBranding();
   const router = useRouter();
 
   const [vendorId, setVendorId] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
+  const [vendorInputValue, setVendorInputValue] = useState("");
   const [lines, setLines] = useState<OrderLine[]>([
-    { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0 },
+    { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0, orderedQtyRaw: "1", unitCostRaw: "0" },
   ]);
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -64,7 +69,7 @@ export default function NewPurchaseOrderPage() {
   const addLine = () => {
     setLines((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0 },
+      { id: crypto.randomUUID(), productId: "", orderedQty: 1, unitCost: 0, orderedQtyRaw: "1", unitCostRaw: "0" },
     ]);
   };
 
@@ -83,10 +88,29 @@ export default function NewPurchaseOrderPage() {
         const updated = { ...l, [field]: value };
         if (field === "productId") {
           const product = products.find((p) => p.id === value);
-          if (product) updated.unitCost = product.costPrice;
+          if (product) {
+            updated.unitCost = product.costPrice;
+            updated.unitCostRaw = String(product.costPrice);
+          }
         }
         return updated;
       })
+    );
+  };
+
+  const updateOrderedQtyRaw = (id: string, raw: string) => {
+    const parsed = parseInt(raw);
+    const orderedQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, orderedQtyRaw: raw, orderedQty }))
+    );
+  };
+
+  const updateUnitCostRaw = (id: string, raw: string) => {
+    const parsed = parseFloat(raw);
+    const unitCost = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    setLines((prev) =>
+      prev.map((l) => (l.id !== id ? l : { ...l, unitCostRaw: raw, unitCost }))
     );
   };
 
@@ -106,7 +130,6 @@ export default function NewPurchaseOrderPage() {
       v.email.toLowerCase().includes(vendorSearch.toLowerCase())
   );
 
-  const selectedVendor = vendors.find((v) => v.id === vendorId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,13 +220,23 @@ export default function NewPurchaseOrderPage() {
                 <input
                   type="text"
                   placeholder={isFetching ? "Loading vendors…" : "Search vendor…"}
-                  value={vendorSearch || (selectedVendor?.name ?? "")}
+                  value={vendorInputValue}
                   onChange={(e) => {
+                    setVendorInputValue(e.target.value);
                     setVendorSearch(e.target.value);
                     if (!e.target.value) setVendorId("");
                   }}
+                  onFocus={() => {
+                    // Re-open dropdown if a vendor is already selected and user focuses again
+                    if (vendorId) setVendorSearch(vendorInputValue);
+                  }}
+                  onBlur={() => {
+                    // Small delay so click on dropdown item fires before blur hides it
+                    setTimeout(() => setVendorSearch(""), 150);
+                  }}
                   id="input-vendor-search"
                   disabled={isFetching}
+                  autoComplete="off"
                   className="w-full bg-[#07080C] border border-[#1E293B] hover:border-emerald-500/30 focus:border-emerald-500 text-slate-200 text-xs px-3 py-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:outline-none placeholder-slate-600 transition-all"
                 />
                 {vendorSearch && filteredVendors.length > 0 && (
@@ -213,8 +246,10 @@ export default function NewPurchaseOrderPage() {
                         key={v.id}
                         type="button"
                         className="w-full px-3 py-2.5 text-left hover:bg-emerald-500/10 text-slate-200 text-xs flex flex-col transition-colors border-b border-[#1E293B]/30 last:border-0"
+                        onMouseDown={(e) => e.preventDefault()} // prevent blur before click
                         onClick={() => {
                           setVendorId(v.id);
+                          setVendorInputValue(v.name);
                           setVendorSearch("");
                         }}
                       >
@@ -224,9 +259,16 @@ export default function NewPurchaseOrderPage() {
                     ))}
                   </div>
                 )}
+                {vendorSearch && filteredVendors.length === 0 && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-[#0E111A] border border-[#1E293B] rounded-lg shadow-2xl px-3 py-3 text-slate-500 text-xs">
+                    No vendors found.
+                  </div>
+                )}
               </div>
-              {selectedVendor && (
-                <p className="text-[10px] text-slate-500 font-mono ml-1">{selectedVendor.email}</p>
+              {vendorId && (
+                <p className="text-[10px] text-emerald-500/70 font-mono ml-1 flex items-center gap-1">
+                  ✓ {vendors.find((v) => v.id === vendorId)?.email}
+                </p>
               )}
             </div>
 
@@ -266,8 +308,8 @@ export default function NewPurchaseOrderPage() {
                 <tr className="border-b border-[#1E293B] text-slate-500 font-mono uppercase text-[10px]">
                   <th className="pb-2 text-left pr-3">Product</th>
                   <th className="pb-2 text-right w-24 px-2">Ordered Qty</th>
-                  <th className="pb-2 text-right w-32 px-2">Unit Cost (₹)</th>
-                  <th className="pb-2 text-right w-32 px-2">Subtotal (₹)</th>
+                  <th className="pb-2 text-right w-32 px-2">Unit Cost ({currencySymbol})</th>
+                  <th className="pb-2 text-right w-32 px-2">Subtotal ({currencySymbol})</th>
                   <th className="pb-2 w-10" />
                 </tr>
               </thead>
@@ -329,14 +371,9 @@ export default function NewPurchaseOrderPage() {
                         <input
                           type="number"
                           min={1}
-                          value={line.orderedQty}
-                          onChange={(e) =>
-                            updateLine(
-                              line.id,
-                              "orderedQty",
-                              Math.max(1, parseInt(e.target.value) || 1)
-                            )
-                          }
+                          value={line.orderedQtyRaw}
+                          onChange={(e) => updateOrderedQtyRaw(line.id, e.target.value)}
+                          onBlur={() => updateOrderedQtyRaw(line.id, String(line.orderedQty))}
                           id={`po-line-qty-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-emerald-500/60 transition-all"
                         />
@@ -346,16 +383,15 @@ export default function NewPurchaseOrderPage() {
                           type="number"
                           min={0}
                           step="0.01"
-                          value={line.unitCost}
-                          onChange={(e) =>
-                            updateLine(line.id, "unitCost", parseFloat(e.target.value) || 0)
-                          }
+                          value={line.unitCostRaw}
+                          onChange={(e) => updateUnitCostRaw(line.id, e.target.value)}
+                          onBlur={() => updateUnitCostRaw(line.id, String(line.unitCost))}
                           id={`po-line-cost-${idx}`}
                           className="w-full bg-[#07080C] border border-[#1E293B] text-slate-200 text-xs px-2 py-2 rounded-lg text-right focus:outline-none focus:border-emerald-500/60 transition-all"
                         />
                       </td>
                       <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-300">
-                        ₹
+                        {currencySymbol}
                         {(line.orderedQty * line.unitCost).toLocaleString("en-IN", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -385,7 +421,7 @@ export default function NewPurchaseOrderPage() {
                     Order Total
                   </td>
                   <td className="pt-4 px-2 text-right font-mono font-extrabold text-emerald-400 text-base">
-                    ₹
+                    {currencySymbol}
                     {total.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,

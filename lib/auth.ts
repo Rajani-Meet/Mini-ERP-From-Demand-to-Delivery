@@ -2,6 +2,7 @@ import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
+import { sendLoginNotification } from "./mailer";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -44,6 +45,11 @@ export const authOptions: AuthOptions = {
             newValue: JSON.stringify({ email: user.email, name: user.name, role: user.role }),
           },
         });
+
+        // Fire login notification email (non-blocking — do not await)
+        sendLoginNotification(user.email, user.name, new Date()).catch((err) =>
+          console.error("[mailer] login notification failed:", err)
+        );
 
         return {
           id: user.id,

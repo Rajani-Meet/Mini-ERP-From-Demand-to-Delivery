@@ -26,9 +26,18 @@ export async function GET(req: Request) {
     const skip = (page - 1) * limit;
 
     const companyId = session.user.companyId;
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN" as any;
 
     // Build the query where clause
-    const where: Prisma.AuditLogWhereInput = { companyId };
+    const where: Prisma.AuditLogWhereInput = {};
+    if (isSuperAdmin) {
+      const targetCompanyId = searchParams.get("companyId");
+      if (targetCompanyId && targetCompanyId !== "ALL") {
+        where.companyId = targetCompanyId;
+      }
+    } else {
+      where.companyId = companyId;
+    }
 
     if (entity && entity !== "ALL") {
       where.entity = entity;

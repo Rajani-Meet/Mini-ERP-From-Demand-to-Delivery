@@ -35,9 +35,17 @@ export async function PATCH(
       canAccessAuditLogs,
     } = body;
 
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN" as Role;
+
     // Fetch user to edit
+    const where: any = { id };
+    if (!isSuperAdmin) {
+      where.companyId = companyId;
+      where.role = { not: "SUPER_ADMIN" as Role };
+    }
+
     const targetUser = await db.user.findFirst({
-      where: { id, companyId },
+      where,
     });
 
     if (!targetUser) {
@@ -46,12 +54,20 @@ export async function PATCH(
 
     // Safeguard: Cannot deactivate or demote oneself
     if (targetUser.id === session.user.id) {
-      if (status === UserStatus.INACTIVE || (role && role !== Role.ADMIN)) {
+      if (status === UserStatus.INACTIVE || (role && role !== Role.ADMIN && role !== "SUPER_ADMIN" as Role)) {
         return NextResponse.json(
           { success: false, message: "Safety constraint: You cannot demote or deactivate your own admin account." },
           { status: 400 }
         );
       }
+    }
+
+    // Guard role elevation
+    if (!isSuperAdmin && role === "SUPER_ADMIN" as Role) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: You cannot promote a user to Super Admin." },
+        { status: 403 }
+      );
     }
 
     // Build update data
@@ -107,7 +123,7 @@ export async function PATCH(
         entityId: id,
         action: "UPDATE",
         userId: session.user.id,
-        companyId,
+        companyId: targetUser.companyId,
         oldValue: JSON.stringify({
           role: targetUser.role,
           status: targetUser.status,
